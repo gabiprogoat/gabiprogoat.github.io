@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análisis de datos</title>
+
+<style>
+body{
+  margin:0;
+  font-family:system-ui,sans-serif;
+  background:#f1f3f6;
+}
+header{
+  background:#111827;
+  color:white;
+  padding:14px;
+  text-align:center;
+  font-size:1.1rem;
+}
+.container{
+  padding:14px;
+  display:grid;
+  gap:14px;
+}
+.card{
+  background:white;
+  border-radius:14px;
+  padding:14px;
+  box-shadow:0 4px 14px rgba(0,0,0,.08);
+}
+select,input,button{
+  padding:6px 8px;
+  border-radius:6px;
+  border:1px solid #ccc;
+}
+button{
+  background:#2563eb;
+  color:white;
+  cursor:pointer;
+  border:none;
+}
+button:hover{background:#1d4ed8;}
+.result{
+  font-size:0.9rem;
+  padding:6px 0;
+  border-bottom:1px solid #eee;
+}
+.back{
+  text-decoration:none;
+  color:#2563eb;
+  font-weight:600;
+}
+</style>
+</head>
+
+<body>
+
+<header>Análisis de datos</header>
+
+<div class="container">
+
+  <div class="card">
+    <a href="index.html" class="back">← Volver al dashboard</a>
+  </div>
+
+  <div class="card">
+    <h3>Añadir hoja de cálculo</h3>
+    <input type="text" id="sheetUrl" placeholder="URL CSV de Google Sheets">
+    <button onclick="addSheet()">Añadir hoja de cálculo</button>
+  </div>
+
+  <div class="card">
+    <h3>Seleccionar columnas</h3>
+
+    <label>Hoja A</label><br>
+    <select id="sheetA" onchange="loadColumns('A')"></select>
+    <select id="colA"></select>
+
+    <br><br>
+
+    <label>Hoja B</label><br>
+    <select id="sheetB" onchange="loadColumns('B')"></select>
+    <select id="colB"></select>
+
+    <br><br>
+    <button onclick="analyze()">Analizar</button>
+  </div>
+
+  <div class="card">
+    <h3>Resultado</h3>
+    <div id="results"></div>
+  </div>
+
+</div>
+
+<script>
+const sheets = [];
+
+function parseCSV(text){
+  const delimiter = text.includes("\t") ? "\t" : ",";
+  const lines = text.split(/\r?\n/).filter(l=>l.trim());
+  const headers = lines[0].split(delimiter);
+  const rows = lines.slice(1).map(l=>l.split(delimiter));
+  return {headers,rows};
+}
+
+function addSheet(){
+  const url = document.getElementById("sheetUrl").value.trim();
+  if(!url) return alert("Pegá una URL válida");
+
+  fetch(url)
+    .then(r=>r.text())
+    .then(csv=>{
+      const data = parseCSV(csv);
+      sheets.push({url, ...data});
+      updateSheetSelectors();
+      document.getElementById("sheetUrl").value="";
+    })
+    .catch(()=>alert("No se pudo cargar la hoja"));
+}
+
+function updateSheetSelectors(){
+  const a = document.getElementById("sheetA");
+  const b = document.getElementById("sheetB");
+  a.innerHTML = b.innerHTML = "";
+
+  sheets.forEach((s,i)=>{
+    const opt1 = new Option(`Hoja ${i+1}`, i);
+    const opt2 = new Option(`Hoja ${i+1}`, i);
+    a.add(opt1);
+    b.add(opt2);
+  });
+
+  loadColumns("A");
+  loadColumns("B");
+}
+
+function loadColumns(type){
+  const sheetIndex = document.getElementById("sheet"+type).value;
+  const colSelect = document.getElementById("col"+type);
+  colSelect.innerHTML="";
+
+  if(sheetIndex===undefined) return;
+  sheets[sheetIndex].headers.forEach((h,i)=>{
+    colSelect.add(new Option(h,i));
+  });
+}
+
+function analyze(){
+  const sA = sheets[document.getElementById("sheetA").value];
+  const sB = sheets[document.getElementById("sheetB").value];
+  const cA = document.getElementById("colA").value;
+  const cB = document.getElementById("colB").value;
+
+  if(!sA || !sB) return alert("Seleccioná ambas hojas");
+
+  const max = Math.max(sA.rows.length, sB.rows.length);
+  const out = document.getElementById("results");
+  out.innerHTML="";
+
+  for(let i=0;i<max;i++){
+    const vA = sA.rows[i]?.[cA] ?? "";
+    const vB = sB.rows[i]?.[cB] ?? "";
+
+    let res;
+    const nA = parseFloat(vA);
+    const nB = parseFloat(vB);
+
+    if(!isNaN(nA) && !isNaN(nB)){
+      res = nA > nB ? "A es mayor" : nB > nA ? "B es mayor" : "Iguales";
+    }else{
+      res = vA.length > vB.length ? "A tiene más letras"
+          : vB.length > vA.length ? "B tiene más letras"
+          : "Misma longitud";
+    }
+
+    const div = document.createElement("div");
+    div.className="result";
+    div.textContent = `Fila ${i+1}: ${res}`;
+    out.appendChild(div);
+  }
+}
+</script>
+
+</body>
+</html>
