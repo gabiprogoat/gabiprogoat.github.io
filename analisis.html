@@ -3,8 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Análisis de datos</title>
-
+<title>Análisis de datos (CSV público)</title>
 <style>
 body{margin:0;font-family:system-ui,sans-serif;background:#f1f3f6;}
 header{background:#111827;color:white;padding:14px;text-align:center;}
@@ -17,9 +16,8 @@ button:hover{background:#1d4ed8;}
 .back{color:#2563eb;text-decoration:none;font-weight:600;}
 </style>
 </head>
-
 <body>
-<header>Análisis de datos</header>
+<header>Análisis de datos (CSV público)</header>
 
 <div class="container">
 
@@ -28,22 +26,20 @@ button:hover{background:#1d4ed8;}
 </div>
 
 <div class="card">
-  <h3>Añadir Google Sheet (público)</h3>
-  <input id="sheetUrl" placeholder="URL del Google Sheet">
-  <button onclick="addDocument()">Añadir</button>
+  <h3>Añadir CSV público (primera hoja)</h3>
+  <input id="csvUrl" placeholder="URL CSV público">
+  <button onclick="addDoc()">Añadir</button>
 </div>
 
 <div class="card">
   <h3>Selección A</h3>
-  <select id="docA" onchange="loadSheets('A')"></select>
-  <select id="sheetA" onchange="loadColumns('A')"></select>
+  <select id="docA" onchange="loadColumns('A')"></select>
   <select id="colA"></select>
 </div>
 
 <div class="card">
   <h3>Selección B</h3>
-  <select id="docB" onchange="loadSheets('B')"></select>
-  <select id="sheetB" onchange="loadColumns('B')"></select>
+  <select id="docB" onchange="loadColumns('B')"></select>
   <select id="colB"></select>
 </div>
 
@@ -59,18 +55,17 @@ button:hover{background:#1d4ed8;}
 </div>
 
 <script>
-/* =========================
-   STORAGE
-========================= */
-const documents = JSON.parse(localStorage.getItem("gs_docs") || "[]");
-function saveDocs(){localStorage.setItem("gs_docs", JSON.stringify(documents));}
+// === STORAGE ===
+const docs = JSON.parse(localStorage.getItem("csv_docs") || "[]");
+const save=()=>localStorage.setItem("csv_docs",JSON.stringify(docs));
 
-/* =========================
-   HELPERS
-========================= */
-function extractId(url){
-  const m = url.match(/\/d\/([^\/]+)/);
-  return m ? m[1] : null;
+// === HELPERS ===
+function parseCSV(text){
+  let delimiter = text.includes("\t") ? "\t" : ",";
+  const lines = text.split(/\r?\n/).filter(l=>l.trim()!=="");
+  const headers = lines[0].split(delimiter).map(h=>h.trim());
+  const rows = lines.slice(1).map(line=>line.split(delimiter));
+  return {headers, rows};
 }
 
 function parseNumber(v){
@@ -78,114 +73,67 @@ function parseNumber(v){
   v=v.toString().replace(/[^\d.,-]/g,"");
   if(v.includes(",") && v.includes(".")){
     v=v.lastIndexOf(",")>v.lastIndexOf(".")?v.replace(/\./g,"").replace(",","."):v.replace(/,/g,"");
-  } else if(v.includes(",")){
-    v=v.replace(",",".");
-  }
+  } else if(v.includes(",")) v=v.replace(",",".");
   return parseFloat(v);
 }
 
-/* =========================
-   LOAD DOCUMENT
-========================= */
-function addDocument(){
-  const url=document.getElementById("sheetUrl").value.trim();
-  const id=extractId(url);
-  if(!id) return alert("URL inválida");
-
-  if(documents.find(d=>d.id===id)) return;
-
-  fetch(`https://docs.google.com/spreadsheets/d/${id}/edit`)
+// === LOAD DOC ===
+function addDoc(){
+  const url=document.getElementById("csvUrl").value.trim();
+  if(!url) return alert("Ingresá un link CSV público");
+  fetch(url)
     .then(r=>r.text())
-    .then(html=>{
-      const matches=[...html.matchAll(/"gid":(\d+),"title":"([^"]+)"/g)];
-      if(!matches.length) throw "No sheets";
-
-      const sheets=matches.map(m=>({gid:m[1],title:m[2]}));
-      documents.push({id,url,sheets,data:{}});
-      saveDocs();
+    .then(text=>{
+      const {headers, rows} = parseCSV(text);
+      docs.push({url, headers, rows});
+      save();
       updateDocs();
-      document.getElementById("sheetUrl").value="";
+      document.getElementById("csvUrl").value="";
     })
-    .catch(()=>{
-      alert("No se pudieron leer las hojas. Verificá que el Sheet sea público.");
-    });
+    .catch(()=>alert("No se pudo cargar el CSV. Revisá que sea público."));
 }
 
 function updateDocs(){
   ["A","B"].forEach(t=>{
     const s=document.getElementById("doc"+t);
     s.innerHTML="";
-    documents.forEach((d,i)=>s.add(new Option(`Doc ${i+1}`,i)));
-    loadSheets(t);
+    docs.forEach((d,i)=>s.add(new Option(`CSV ${i+1}`,i)));
+    loadColumns(t);
   });
 }
 
-function loadSheets(t){
-  const d=documents[document.getElementById("doc"+t).value];
-  const s=document.getElementById("sheet"+t);
-  s.innerHTML="";
-  d.sheets.forEach(sh=>s.add(new Option(sh.title,sh.gid)));
-  loadColumns(t);
-}
-
 function loadColumns(t){
-  const d=documents[document.getElementById("doc"+t).value];
-  const gid=document.getElementById("sheet"+t).value;
-  const key=d.id+"_"+gid;
-
-  if(d.data[key]){
-    fillCols(t,d.data[key].headers);
-    return;
-  }
-
-  fetch(`https://docs.google.com/spreadsheets/d/${d.id}/export?format=csv&gid=${gid}`)
-    .then(r=>r.text())
-    .then(csv=>{
-      const lines=csv.split(/\r?\n/).filter(l=>l);
-      const headers=lines[0].split(",");
-      const rows=lines.slice(1).map(l=>l.split(","));
-      d.data[key]={headers,rows};
-      saveDocs();
-      fillCols(t,headers);
-    });
-}
-
-function fillCols(t,headers){
-  const c=document.getElementById("col"+t);
+  const d = docs[document.getElementById("doc"+t).value];
+  const c = document.getElementById("col"+t);
   c.innerHTML="";
-  headers.forEach((h,i)=>c.add(new Option(h,i)));
+  d.headers.forEach((h,i)=>c.add(new Option(h,i)));
 }
 
-/* =========================
-   ANALYZE
-========================= */
+// === ANALYZE ===
 function analyze(){
-  const dA=documents[docA.value];
-  const dB=documents[docB.value];
-  const rA=dA.data[dA.id+"_"+sheetA.value].rows;
-  const rB=dB.data[dB.id+"_"+sheetB.value].rows;
-
-  const out=document.getElementById("results");
+  const a = docs[docA.value], b = docs[docB.value];
+  const max = Math.max(a.rows.length, b.rows.length);
+  const out = document.getElementById("results");
   out.innerHTML="";
-  const max=Math.max(rA.length,rB.length);
 
-  for(let i=1;i<max;i++){
-    const vA=rA[i]?.[colA.value]||"";
-    const vB=rB[i]?.[colB.value]||"";
+  for(let i=0;i<max;i++){
+    const vA=a.rows[i]?.[colA.value]||"";
+    const vB=b.rows[i]?.[colB.value]||"";
 
     const nA=parseNumber(vA), nB=parseNumber(vB);
-    const a=!isNaN(nA), b=!isNaN(nB);
+    const isNumA=!isNaN(nA), isNumB=!isNaN(nB);
 
-    let r;
-    if(a&&b) r=nA>nB?"A mayor":nB>nA?"B mayor":"Iguales";
-    else if(a) r="A numérico";
-    else if(b) r="B numérico";
-    else r=vA.length>vB.length?"A más letras":vB.length>vA.length?"B más letras":"Iguales";
+    let res;
+    if(isNumA && isNumB) res = nA>nB?`A es mayor (${nA} > ${nB})`:nB>nA?`B es mayor (${nB} > ${nA})`:"Iguales";
+    else if(isNumA) res = "A es numérico y B no";
+    else if(isNumB) res = "B es numérico y A no";
+    else res = vA.length>vB.length?"A tiene más letras":vB.length>vA.length?"B tiene más letras":"Iguales";
 
-    out.innerHTML+=`<div class="result">Fila ${i+1}: ${r}</div>`;
+    out.innerHTML+=`<div class="result">Fila ${i+2}: ${res}</div>`;
   }
 }
 
+// Inicializar selects
 updateDocs();
 </script>
 </body>
