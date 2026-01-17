@@ -28,8 +28,8 @@ button:hover{background:#1d4ed8;}
 </div>
 
 <div class="card">
-  <h3>Añadir Google Sheet</h3>
-  <input id="sheetUrl" placeholder="URL del documento Google Sheets">
+  <h3>Añadir Google Sheet (público)</h3>
+  <input id="sheetUrl" placeholder="URL del Google Sheet">
   <button onclick="addDocument()">Añadir</button>
 </div>
 
@@ -63,10 +63,7 @@ button:hover{background:#1d4ed8;}
    STORAGE
 ========================= */
 const documents = JSON.parse(localStorage.getItem("gs_docs") || "[]");
-
-function saveDocs(){
-  localStorage.setItem("gs_docs", JSON.stringify(documents));
-}
+function saveDocs(){localStorage.setItem("gs_docs", JSON.stringify(documents));}
 
 /* =========================
    HELPERS
@@ -78,40 +75,40 @@ function extractId(url){
 
 function parseNumber(v){
   if(!v) return NaN;
-  v = v.toString().replace(/[^\d.,-]/g,"");
+  v=v.toString().replace(/[^\d.,-]/g,"");
   if(v.includes(",") && v.includes(".")){
-    v = v.lastIndexOf(",") > v.lastIndexOf(".")
-      ? v.replace(/\./g,"").replace(",",".")
-      : v.replace(/,/g,"");
+    v=v.lastIndexOf(",")>v.lastIndexOf(".")?v.replace(/\./g,"").replace(",","."):v.replace(/,/g,"");
   } else if(v.includes(",")){
-    v = v.replace(",",".");
+    v=v.replace(",",".");
   }
   return parseFloat(v);
 }
 
 /* =========================
-   LOAD DOCUMENTS
+   LOAD DOCUMENT
 ========================= */
 function addDocument(){
-  const url = document.getElementById("sheetUrl").value.trim();
-  const id = extractId(url);
+  const url=document.getElementById("sheetUrl").value.trim();
+  const id=extractId(url);
   if(!id) return alert("URL inválida");
 
   if(documents.find(d=>d.id===id)) return;
 
-  fetch(`https://spreadsheets.google.com/feeds/worksheets/${id}/public/basic?alt=json`)
-    .then(r=>r.json())
-    .then(j=>{
-      const sheets = j.feed.entry.map(e=>({
-        title:e.title.$t,
-        gid:e.id.$t.split("/").pop()
-      }));
+  fetch(`https://docs.google.com/spreadsheets/d/${id}/edit`)
+    .then(r=>r.text())
+    .then(html=>{
+      const matches=[...html.matchAll(/"gid":(\d+),"title":"([^"]+)"/g)];
+      if(!matches.length) throw "No sheets";
+
+      const sheets=matches.map(m=>({gid:m[1],title:m[2]}));
       documents.push({id,url,sheets,data:{}});
       saveDocs();
       updateDocs();
       document.getElementById("sheetUrl").value="";
     })
-    .catch(()=>alert("El documento debe ser público"));
+    .catch(()=>{
+      alert("No se pudieron leer las hojas. Verificá que el Sheet sea público.");
+    });
 }
 
 function updateDocs(){
@@ -165,28 +162,24 @@ function fillCols(t,headers){
 function analyze(){
   const dA=documents[docA.value];
   const dB=documents[docB.value];
-  const kA=dA.id+"_"+sheetA.value;
-  const kB=dB.id+"_"+sheetB.value;
-
-  const rowsA=dA.data[kA].rows;
-  const rowsB=dB.data[kB].rows;
+  const rA=dA.data[dA.id+"_"+sheetA.value].rows;
+  const rB=dB.data[dB.id+"_"+sheetB.value].rows;
 
   const out=document.getElementById("results");
   out.innerHTML="";
+  const max=Math.max(rA.length,rB.length);
 
-  const max=Math.max(rowsA.length,rowsB.length);
-
-  for(let i=1;i<max;i++){ // IGNORA TÍTULOS
-    const vA=rowsA[i]?.[colA.value]||"";
-    const vB=rowsB[i]?.[colB.value]||"";
+  for(let i=1;i<max;i++){
+    const vA=rA[i]?.[colA.value]||"";
+    const vB=rB[i]?.[colB.value]||"";
 
     const nA=parseNumber(vA), nB=parseNumber(vB);
-    const isA=!isNaN(nA), isB=!isNaN(nB);
+    const a=!isNaN(nA), b=!isNaN(nB);
 
     let r;
-    if(isA && isB) r = nA>nB?"A mayor":nB>nA?"B mayor":"Iguales";
-    else if(isA) r="A numérico";
-    else if(isB) r="B numérico";
+    if(a&&b) r=nA>nB?"A mayor":nB>nA?"B mayor":"Iguales";
+    else if(a) r="A numérico";
+    else if(b) r="B numérico";
     else r=vA.length>vB.length?"A más letras":vB.length>vA.length?"B más letras":"Iguales";
 
     out.innerHTML+=`<div class="result">Fila ${i+1}: ${r}</div>`;
