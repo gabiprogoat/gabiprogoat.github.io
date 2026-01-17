@@ -6,231 +6,194 @@
 <title>Análisis de datos</title>
 
 <style>
-body{
-  margin:0;
-  font-family:system-ui,sans-serif;
-  background:#f1f3f6;
-}
-header{
-  background:#111827;
-  color:white;
-  padding:14px;
-  text-align:center;
-  font-size:1.1rem;
-}
-.container{
-  padding:14px;
-  display:grid;
-  gap:14px;
-}
-.card{
-  background:white;
-  border-radius:14px;
-  padding:14px;
-  box-shadow:0 4px 14px rgba(0,0,0,.08);
-}
-select,input,button{
-  padding:6px 8px;
-  border-radius:6px;
-  border:1px solid #ccc;
-}
-button{
-  background:#2563eb;
-  color:white;
-  cursor:pointer;
-  border:none;
-}
+body{margin:0;font-family:system-ui,sans-serif;background:#f1f3f6;}
+header{background:#111827;color:white;padding:14px;text-align:center;}
+.container{padding:14px;display:grid;gap:14px;}
+.card{background:white;border-radius:14px;padding:14px;box-shadow:0 4px 14px rgba(0,0,0,.08);}
+select,input,button{padding:6px 8px;border-radius:6px;border:1px solid #ccc;}
+button{background:#2563eb;color:white;border:none;cursor:pointer;}
 button:hover{background:#1d4ed8;}
-.result{
-  font-size:0.9rem;
-  padding:6px 0;
-  border-bottom:1px solid #eee;
-}
-.back{
-  text-decoration:none;
-  color:#2563eb;
-  font-weight:600;
-}
+.result{font-size:.9rem;border-bottom:1px solid #eee;padding:6px 0;}
+.back{color:#2563eb;text-decoration:none;font-weight:600;}
 </style>
 </head>
 
 <body>
-
 <header>Análisis de datos</header>
 
 <div class="container">
 
-  <div class="card">
-    <a href="index.html" class="back">← Volver al dashboard</a>
-  </div>
+<div class="card">
+  <a href="index.html" class="back">← Volver</a>
+</div>
 
-  <div class="card">
-    <h3>Añadir hoja de cálculo</h3>
-    <input type="text" id="sheetUrl" placeholder="URL CSV de Google Sheets">
-    <button onclick="addSheet()">Añadir hoja de cálculo</button>
-  </div>
+<div class="card">
+  <h3>Añadir Google Sheet</h3>
+  <input id="sheetUrl" placeholder="URL del documento Google Sheets">
+  <button onclick="addDocument()">Añadir</button>
+</div>
 
-  <div class="card">
-    <h3>Seleccionar columnas</h3>
+<div class="card">
+  <h3>Selección A</h3>
+  <select id="docA" onchange="loadSheets('A')"></select>
+  <select id="sheetA" onchange="loadColumns('A')"></select>
+  <select id="colA"></select>
+</div>
 
-    <label>Hoja A</label><br>
-    <select id="sheetA" onchange="loadColumns('A')"></select>
-    <select id="colA"></select>
+<div class="card">
+  <h3>Selección B</h3>
+  <select id="docB" onchange="loadSheets('B')"></select>
+  <select id="sheetB" onchange="loadColumns('B')"></select>
+  <select id="colB"></select>
+</div>
 
-    <br><br>
+<div class="card">
+  <button onclick="analyze()">Analizar</button>
+</div>
 
-    <label>Hoja B</label><br>
-    <select id="sheetB" onchange="loadColumns('B')"></select>
-    <select id="colB"></select>
-
-    <br><br>
-    <button onclick="analyze()">Analizar</button>
-  </div>
-
-  <div class="card">
-    <h3>Resultado</h3>
-    <div id="results"></div>
-  </div>
+<div class="card">
+  <h3>Resultado</h3>
+  <div id="results"></div>
+</div>
 
 </div>
 
 <script>
 /* =========================
-   UTILIDADES
+   STORAGE
 ========================= */
+const documents = JSON.parse(localStorage.getItem("gs_docs") || "[]");
 
-function parseNumber(value){
-  if(value === null || value === undefined) return NaN;
+function saveDocs(){
+  localStorage.setItem("gs_docs", JSON.stringify(documents));
+}
 
-  let v = value.toString().trim();
-  if(v === "") return NaN;
+/* =========================
+   HELPERS
+========================= */
+function extractId(url){
+  const m = url.match(/\/d\/([^\/]+)/);
+  return m ? m[1] : null;
+}
 
-  v = v.replace(/[^\d.,-]/g, "");
-
+function parseNumber(v){
+  if(!v) return NaN;
+  v = v.toString().replace(/[^\d.,-]/g,"");
   if(v.includes(",") && v.includes(".")){
-    if(v.lastIndexOf(",") > v.lastIndexOf(".")){
-      v = v.replace(/\./g,"").replace(",",".");
-    }else{
-      v = v.replace(/,/g,"");
-    }
-  }
-  else if(v.includes(",")){
+    v = v.lastIndexOf(",") > v.lastIndexOf(".")
+      ? v.replace(/\./g,"").replace(",",".")
+      : v.replace(/,/g,"");
+  } else if(v.includes(",")){
     v = v.replace(",",".");
   }
-
-  const n = parseFloat(v);
-  return isNaN(n) ? NaN : n;
-}
-
-function parseCSV(text){
-  const delimiter = text.includes("\t") ? "\t" : ",";
-  const lines = text.split(/\r?\n/).filter(l=>l.trim());
-  const headers = lines[0].split(delimiter).map(h=>h.trim());
-  const rows = lines.slice(1).map(l=>l.split(delimiter).map(c=>c.trim()));
-  return {headers,rows};
+  return parseFloat(v);
 }
 
 /* =========================
-   MANEJO DE HOJAS
+   LOAD DOCUMENTS
 ========================= */
-
-const sheets = [];
-
-function addSheet(){
+function addDocument(){
   const url = document.getElementById("sheetUrl").value.trim();
-  if(!url) return alert("Pegá una URL válida");
+  const id = extractId(url);
+  if(!id) return alert("URL inválida");
 
-  fetch(url)
-    .then(r=>r.text())
-    .then(csv=>{
-      const data = parseCSV(csv);
-      sheets.push({url, ...data});
-      updateSheetSelectors();
+  if(documents.find(d=>d.id===id)) return;
+
+  fetch(`https://spreadsheets.google.com/feeds/worksheets/${id}/public/basic?alt=json`)
+    .then(r=>r.json())
+    .then(j=>{
+      const sheets = j.feed.entry.map(e=>({
+        title:e.title.$t,
+        gid:e.id.$t.split("/").pop()
+      }));
+      documents.push({id,url,sheets,data:{}});
+      saveDocs();
+      updateDocs();
       document.getElementById("sheetUrl").value="";
     })
-    .catch(()=>alert("No se pudo cargar la hoja"));
+    .catch(()=>alert("El documento debe ser público"));
 }
 
-function updateSheetSelectors(){
-  const a = document.getElementById("sheetA");
-  const b = document.getElementById("sheetB");
-  a.innerHTML = b.innerHTML = "";
-
-  sheets.forEach((_,i)=>{
-    a.add(new Option(`Hoja ${i+1}`, i));
-    b.add(new Option(`Hoja ${i+1}`, i));
+function updateDocs(){
+  ["A","B"].forEach(t=>{
+    const s=document.getElementById("doc"+t);
+    s.innerHTML="";
+    documents.forEach((d,i)=>s.add(new Option(`Doc ${i+1}`,i)));
+    loadSheets(t);
   });
-
-  loadColumns("A");
-  loadColumns("B");
 }
 
-function loadColumns(type){
-  const sheetIndex = document.getElementById("sheet"+type).value;
-  const colSelect = document.getElementById("col"+type);
-  colSelect.innerHTML = "";
+function loadSheets(t){
+  const d=documents[document.getElementById("doc"+t).value];
+  const s=document.getElementById("sheet"+t);
+  s.innerHTML="";
+  d.sheets.forEach(sh=>s.add(new Option(sh.title,sh.gid)));
+  loadColumns(t);
+}
 
-  if(sheetIndex === "") return;
+function loadColumns(t){
+  const d=documents[document.getElementById("doc"+t).value];
+  const gid=document.getElementById("sheet"+t).value;
+  const key=d.id+"_"+gid;
 
-  sheets[sheetIndex].headers.forEach((h,i)=>{
-    colSelect.add(new Option(h,i));
-  });
+  if(d.data[key]){
+    fillCols(t,d.data[key].headers);
+    return;
+  }
+
+  fetch(`https://docs.google.com/spreadsheets/d/${d.id}/export?format=csv&gid=${gid}`)
+    .then(r=>r.text())
+    .then(csv=>{
+      const lines=csv.split(/\r?\n/).filter(l=>l);
+      const headers=lines[0].split(",");
+      const rows=lines.slice(1).map(l=>l.split(","));
+      d.data[key]={headers,rows};
+      saveDocs();
+      fillCols(t,headers);
+    });
+}
+
+function fillCols(t,headers){
+  const c=document.getElementById("col"+t);
+  c.innerHTML="";
+  headers.forEach((h,i)=>c.add(new Option(h,i)));
 }
 
 /* =========================
-   ANÁLISIS
+   ANALYZE
 ========================= */
-
 function analyze(){
-  const sA = sheets[document.getElementById("sheetA").value];
-  const sB = sheets[document.getElementById("sheetB").value];
-  const cA = document.getElementById("colA").value;
-  const cB = document.getElementById("colB").value;
+  const dA=documents[docA.value];
+  const dB=documents[docB.value];
+  const kA=dA.id+"_"+sheetA.value;
+  const kB=dB.id+"_"+sheetB.value;
 
-  if(!sA || !sB) return alert("Seleccioná ambas hojas");
+  const rowsA=dA.data[kA].rows;
+  const rowsB=dB.data[kB].rows;
 
-  const startRow = 1; // <-- IGNORA LA FILA DE TÍTULOS
-  const max = Math.max(sA.rows.length, sB.rows.length);
+  const out=document.getElementById("results");
+  out.innerHTML="";
 
-  const out = document.getElementById("results");
-  out.innerHTML = "";
+  const max=Math.max(rowsA.length,rowsB.length);
 
-  for(let i=startRow;i<max;i++){
-    const vA = sA.rows[i]?.[cA] ?? "";
-    const vB = sB.rows[i]?.[cB] ?? "";
+  for(let i=1;i<max;i++){ // IGNORA TÍTULOS
+    const vA=rowsA[i]?.[colA.value]||"";
+    const vB=rowsB[i]?.[colB.value]||"";
 
-    const nA = parseNumber(vA);
-    const nB = parseNumber(vB);
+    const nA=parseNumber(vA), nB=parseNumber(vB);
+    const isA=!isNaN(nA), isB=!isNaN(nB);
 
-    const isNumA = !isNaN(nA);
-    const isNumB = !isNaN(nB);
+    let r;
+    if(isA && isB) r = nA>nB?"A mayor":nB>nA?"B mayor":"Iguales";
+    else if(isA) r="A numérico";
+    else if(isB) r="B numérico";
+    else r=vA.length>vB.length?"A más letras":vB.length>vA.length?"B más letras":"Iguales";
 
-    let res;
-
-    if(isNumA && isNumB){
-      res = nA > nB ? `A es mayor (${nA} > ${nB})`
-          : nB > nA ? `B es mayor (${nB} > ${nA})`
-          : "Ambos son iguales";
-    }
-    else if(isNumA && !isNumB){
-      res = "A es numérico y B no";
-    }
-    else if(!isNumA && isNumB){
-      res = "B es numérico y A no";
-    }
-    else{
-      res = vA.length > vB.length ? "A tiene más letras"
-          : vB.length > vA.length ? "B tiene más letras"
-          : "Misma longitud de texto";
-    }
-
-    const div = document.createElement("div");
-    div.className = "result";
-    div.textContent = `Fila ${i+1}: ${res}`;
-    out.appendChild(div);
+    out.innerHTML+=`<div class="result">Fila ${i+1}: ${r}</div>`;
   }
 }
-</script>
 
+updateDocs();
+</script>
 </body>
 </html>
