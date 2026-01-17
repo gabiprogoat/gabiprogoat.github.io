@@ -95,15 +95,47 @@ button:hover{background:#1d4ed8;}
 </div>
 
 <script>
-const sheets = [];
+/* =========================
+   UTILIDADES
+========================= */
+
+function parseNumber(value){
+  if(!value) return NaN;
+
+  let v = value.toString().trim();
+
+  // eliminar símbolos de moneda y texto
+  v = v.replace(/[^\d.,-]/g, "");
+
+  // formato europeo 1.234,56
+  if(v.includes(",") && v.includes(".")){
+    if(v.lastIndexOf(",") > v.lastIndexOf(".")){
+      v = v.replace(/\./g,"").replace(",",".");
+    }else{
+      v = v.replace(/,/g,"");
+    }
+  }
+  // solo coma → decimal
+  else if(v.includes(",")){
+    v = v.replace(",",".");
+  }
+
+  return parseFloat(v);
+}
 
 function parseCSV(text){
   const delimiter = text.includes("\t") ? "\t" : ",";
   const lines = text.split(/\r?\n/).filter(l=>l.trim());
-  const headers = lines[0].split(delimiter);
-  const rows = lines.slice(1).map(l=>l.split(delimiter));
+  const headers = lines[0].split(delimiter).map(h=>h.trim());
+  const rows = lines.slice(1).map(l=>l.split(delimiter).map(c=>c.trim()));
   return {headers,rows};
 }
+
+/* =========================
+   MANEJO DE HOJAS
+========================= */
+
+const sheets = [];
 
 function addSheet(){
   const url = document.getElementById("sheetUrl").value.trim();
@@ -125,11 +157,9 @@ function updateSheetSelectors(){
   const b = document.getElementById("sheetB");
   a.innerHTML = b.innerHTML = "";
 
-  sheets.forEach((s,i)=>{
-    const opt1 = new Option(`Hoja ${i+1}`, i);
-    const opt2 = new Option(`Hoja ${i+1}`, i);
-    a.add(opt1);
-    b.add(opt2);
+  sheets.forEach((_,i)=>{
+    a.add(new Option(`Hoja ${i+1}`, i));
+    b.add(new Option(`Hoja ${i+1}`, i));
   });
 
   loadColumns("A");
@@ -139,13 +169,18 @@ function updateSheetSelectors(){
 function loadColumns(type){
   const sheetIndex = document.getElementById("sheet"+type).value;
   const colSelect = document.getElementById("col"+type);
-  colSelect.innerHTML="";
+  colSelect.innerHTML = "";
 
-  if(sheetIndex===undefined) return;
+  if(sheetIndex === "") return;
+
   sheets[sheetIndex].headers.forEach((h,i)=>{
     colSelect.add(new Option(h,i));
   });
 }
+
+/* =========================
+   ANÁLISIS
+========================= */
 
 function analyze(){
   const sA = sheets[document.getElementById("sheetA").value];
@@ -157,26 +192,29 @@ function analyze(){
 
   const max = Math.max(sA.rows.length, sB.rows.length);
   const out = document.getElementById("results");
-  out.innerHTML="";
+  out.innerHTML = "";
 
   for(let i=0;i<max;i++){
     const vA = sA.rows[i]?.[cA] ?? "";
     const vB = sB.rows[i]?.[cB] ?? "";
 
+    const nA = parseNumber(vA);
+    const nB = parseNumber(vB);
+
     let res;
-    const nA = parseFloat(vA);
-    const nB = parseFloat(vB);
 
     if(!isNaN(nA) && !isNaN(nB)){
-      res = nA > nB ? "A es mayor" : nB > nA ? "B es mayor" : "Iguales";
+      res = nA > nB ? `A es mayor (${nA} > ${nB})`
+          : nB > nA ? `B es mayor (${nB} > ${nA})`
+          : "Ambos son iguales";
     }else{
       res = vA.length > vB.length ? "A tiene más letras"
           : vB.length > vA.length ? "B tiene más letras"
-          : "Misma longitud";
+          : "Misma longitud de texto";
     }
 
     const div = document.createElement("div");
-    div.className="result";
+    div.className = "result";
     div.textContent = `Fila ${i+1}: ${res}`;
     out.appendChild(div);
   }
