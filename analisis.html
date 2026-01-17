@@ -100,14 +100,13 @@ button:hover{background:#1d4ed8;}
 ========================= */
 
 function parseNumber(value){
-  if(!value) return NaN;
+  if(value === null || value === undefined) return NaN;
 
   let v = value.toString().trim();
+  if(v === "") return NaN;
 
-  // eliminar símbolos de moneda y texto
   v = v.replace(/[^\d.,-]/g, "");
 
-  // formato europeo 1.234,56
   if(v.includes(",") && v.includes(".")){
     if(v.lastIndexOf(",") > v.lastIndexOf(".")){
       v = v.replace(/\./g,"").replace(",",".");
@@ -115,12 +114,12 @@ function parseNumber(value){
       v = v.replace(/,/g,"");
     }
   }
-  // solo coma → decimal
   else if(v.includes(",")){
     v = v.replace(",",".");
   }
 
-  return parseFloat(v);
+  const n = parseFloat(v);
+  return isNaN(n) ? NaN : n;
 }
 
 function parseCSV(text){
@@ -190,24 +189,36 @@ function analyze(){
 
   if(!sA || !sB) return alert("Seleccioná ambas hojas");
 
+  const startRow = 1; // <-- IGNORA LA FILA DE TÍTULOS
   const max = Math.max(sA.rows.length, sB.rows.length);
+
   const out = document.getElementById("results");
   out.innerHTML = "";
 
-  for(let i=0;i<max;i++){
+  for(let i=startRow;i<max;i++){
     const vA = sA.rows[i]?.[cA] ?? "";
     const vB = sB.rows[i]?.[cB] ?? "";
 
     const nA = parseNumber(vA);
     const nB = parseNumber(vB);
 
+    const isNumA = !isNaN(nA);
+    const isNumB = !isNaN(nB);
+
     let res;
 
-    if(!isNaN(nA) && !isNaN(nB)){
+    if(isNumA && isNumB){
       res = nA > nB ? `A es mayor (${nA} > ${nB})`
           : nB > nA ? `B es mayor (${nB} > ${nA})`
           : "Ambos son iguales";
-    }else{
+    }
+    else if(isNumA && !isNumB){
+      res = "A es numérico y B no";
+    }
+    else if(!isNumA && isNumB){
+      res = "B es numérico y A no";
+    }
+    else{
       res = vA.length > vB.length ? "A tiene más letras"
           : vB.length > vA.length ? "B tiene más letras"
           : "Misma longitud de texto";
