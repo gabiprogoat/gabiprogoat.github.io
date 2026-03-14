@@ -371,7 +371,7 @@
         sortedMonths.forEach((month) => {
           const group = monthGroups[month];
           const avgTotalForMonth = group.count > 0 ? group.totalSum / group.count : 0;
-          const idealShipping = avgTotalForMonth / (2 - avgTolerance);
+          const idealShipping = avgTotalForMonth * avgTolerance;
 
           const tr = document.createElement("tr");
           tr.innerHTML = `
