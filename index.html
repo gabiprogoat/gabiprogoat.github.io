@@ -141,7 +141,7 @@
     <div class="card">
       <h2>Envío promedio y composición</h2>
       <div class="kpi" id="avg-shipping">Cargando...</div>
-      <div class="subtext">Promedio de (serviceTax + deliveryCharge)</div>
+      <div class="subtext">Promedio de (serviceTax calculado + deliveryCharge)</div>
 
       <div class="metric-list">
         <div class="metric-item">
@@ -151,12 +151,12 @@
 
         <div class="metric-item">
           <strong id="avg-service-tax">Cargando...</strong>
-          Promedio de serviceTax
+          Promedio de serviceTax calculado
         </div>
 
         <div class="metric-item">
           <strong id="avg-hiding-index">Cargando...</strong>
-          Índice de ocultamiento promedio (deliveryCharge / serviceTax)
+          Índice de ocultamiento promedio (deliveryCharge / serviceTax calculado)
         </div>
       </div>
     </div>
@@ -318,14 +318,17 @@
           throw new Error("No se encontraron datos en el archivo.");
         }
 
-        const serviceTaxIndex = findColumnIndex(headers, ["serviceTax", "service tax"]);
+        // serviceTax YA NO se toma del Excel: se calcula
+        const grandTotalIndex = findColumnIndex(headers, ["grandTotal", "grand total"]);
+        const discountIndex = findColumnIndex(headers, ["discount", "descuento"]);
         const deliveryChargeIndex = findColumnIndex(headers, ["deliveryCharge", "delivery charge"]);
         const totalIndex = findColumnIndex(headers, ["total"]);
         const monthIndex = findColumnIndex(headers, ["month", "mes"]);
 
-        if ([serviceTaxIndex, deliveryChargeIndex, totalIndex, monthIndex].includes(-1)) {
+        if ([grandTotalIndex, discountIndex, deliveryChargeIndex, totalIndex, monthIndex].includes(-1)) {
           const missing = [];
-          if (serviceTaxIndex === -1) missing.push("serviceTax");
+          if (grandTotalIndex === -1) missing.push("grandTotal");
+          if (discountIndex === -1) missing.push("discount");
           if (deliveryChargeIndex === -1) missing.push("deliveryCharge");
           if (totalIndex === -1) missing.push("total");
           if (monthIndex === -1) missing.push("month");
@@ -348,11 +351,16 @@
         const monthGroups = {};
 
         rows.forEach((row) => {
-          const serviceTax = parseNumber(row[serviceTaxIndex]);
+          const grandTotal = parseNumber(row[grandTotalIndex]);
+          const discount = parseNumber(row[discountIndex]);
           const deliveryCharge = parseNumber(row[deliveryChargeIndex]);
           const total = parseNumber(row[totalIndex]);
           const month = cleanCell(row[monthIndex]) || "Sin mes";
 
+          // NUEVO serviceTax calculado
+          const serviceTax = (grandTotal + discount) - (total + deliveryCharge);
+
+          // Envío usando serviceTax calculado
           const shipping = serviceTax + deliveryCharge;
 
           totalShippingSum += shipping;
@@ -360,14 +368,14 @@
           serviceTaxSum += serviceTax;
           processedRows++;
 
-          // NUEVO índice de tolerancia: deliveryCharge / total
+          // Índice de tolerancia = deliveryCharge / total
           if (total > 0) {
             const toleranceIndex = deliveryCharge / total;
             toleranceSum += toleranceIndex;
             validToleranceCount++;
           }
 
-          // NUEVO índice de ocultamiento: deliveryCharge / serviceTax
+          // Índice de ocultamiento = deliveryCharge / serviceTax calculado
           if (serviceTax > 0) {
             const hidingIndex = deliveryCharge / serviceTax;
             hidingIndexSum += hidingIndex;
@@ -417,7 +425,7 @@
           const group = monthGroups[month];
           const avgTotalForMonth = group.count > 0 ? group.totalSum / group.count : 0;
 
-          // NUEVO envío ideal usando el nuevo índice de tolerancia
+          // Envío ideal usando el índice de tolerancia actual
           const idealShipping = avgTotalForMonth * avgTolerance;
 
           const tr = document.createElement("tr");
@@ -434,7 +442,8 @@
         document.getElementById("summary").innerHTML = `
           <p><strong>Columnas detectadas:</strong></p>
           <ul>
-            <li>serviceTax → <strong>${headers[serviceTaxIndex]}</strong></li>
+            <li>grandTotal → <strong>${headers[grandTotalIndex]}</strong></li>
+            <li>discount → <strong>${headers[discountIndex]}</strong></li>
             <li>deliveryCharge → <strong>${headers[deliveryChargeIndex]}</strong></li>
             <li>total → <strong>${headers[totalIndex]}</strong></li>
             <li>month → <strong>${headers[monthIndex]}</strong></li>
@@ -442,22 +451,23 @@
 
           <p><strong>Registros procesados:</strong> ${processedRows}</p>
           <p><strong>Registros válidos para índice de tolerancia (deliveryCharge / total):</strong> ${validToleranceCount}</p>
-          <p><strong>Registros válidos para índice de ocultamiento (deliveryCharge / serviceTax):</strong> ${validHidingIndexCount}</p>
+          <p><strong>Registros válidos para índice de ocultamiento (deliveryCharge / serviceTax calculado):</strong> ${validHidingIndexCount}</p>
 
           <p><strong>Promedios globales:</strong></p>
           <ul>
             <li>Envío promedio = <strong>${formatCurrency(avgShipping)}</strong></li>
             <li>Promedio deliveryCharge = <strong>${formatCurrency(avgDeliveryCharge)}</strong></li>
-            <li>Promedio serviceTax = <strong>${formatCurrency(avgServiceTax)}</strong></li>
+            <li>Promedio serviceTax calculado = <strong>${formatCurrency(avgServiceTax)}</strong></li>
             <li>Índice de ocultamiento promedio = <strong>${formatPercent(avgHidingIndex)}</strong></li>
             <li>Índice de tolerancia promedio = <strong>${formatPercent(avgTolerance)}</strong></li>
           </ul>
 
           <p><strong>Fórmulas usadas:</strong></p>
           <ul>
-            <li>Envío = serviceTax + deliveryCharge</li>
+            <li>serviceTax calculado = (grandTotal + discount) - (total + deliveryCharge)</li>
+            <li>Envío = serviceTax calculado + deliveryCharge</li>
             <li>Índice de tolerancia = deliveryCharge / total</li>
-            <li>Índice de ocultamiento = deliveryCharge / serviceTax</li>
+            <li>Índice de ocultamiento = deliveryCharge / serviceTax calculado</li>
             <li>Envío ideal por mes = Promedio total del mes × Índice de tolerancia promedio</li>
           </ul>
         `;
