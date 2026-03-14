@@ -376,11 +376,11 @@
           }
 
           // Índice de ocultamiento = deliveryCharge / serviceTax calculado
-          if (serviceTax > 0) {
-            const hidingIndex = serviceTax / deliveryCharge  ;
-            hidingIndexSum += hidingIndex;
-            validHidingIndexCount++;
-          }
+        if (shipping > 0) {
+  const hidingIndex = serviceTax / shipping;
+  hidingIndexSum += hidingIndex;
+  validHidingIndexCount++;
+}
 
           if (!monthGroups[month]) {
             monthGroups[month] = {
