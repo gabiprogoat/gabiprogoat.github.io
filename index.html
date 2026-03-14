@@ -377,7 +377,7 @@
 
           // Índice de ocultamiento = deliveryCharge / serviceTax calculado
           if (serviceTax > 0) {
-            const hidingIndex = deliveryCharge / serviceTax;
+            const hidingIndex = serviceTax / deliveryCharge  ;
             hidingIndexSum += hidingIndex;
             validHidingIndexCount++;
           }
