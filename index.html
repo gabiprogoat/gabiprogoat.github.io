@@ -61,6 +61,26 @@
       font-size: 0.95rem;
     }
 
+    .metric-list {
+      margin-top: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .metric-item {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+    }
+
+    .metric-item strong {
+      display: block;
+      font-size: 1rem;
+      margin-bottom: 2px;
+    }
+
     .table-wrap {
       overflow-x: auto;
       margin-top: 10px;
@@ -91,16 +111,6 @@
       display: inline-block;
     }
 
-    .ok {
-      background: #dcfce7;
-      color: #166534;
-    }
-
-    .warn {
-      background: #fef3c7;
-      color: #92400e;
-    }
-
     .error {
       background: #fee2e2;
       color: #991b1b;
@@ -129,15 +139,32 @@
 
   <div class="container" id="dashboard-container">
     <div class="card">
-      <h2>Envío promedio</h2>
+      <h2>Envío promedio y composición</h2>
       <div class="kpi" id="avg-shipping">Cargando...</div>
-      <div class="subtext">Promedio de tarifa de servicio + envio</div>
+      <div class="subtext">Promedio de (serviceTax + deliveryCharge)</div>
+
+      <div class="metric-list">
+        <div class="metric-item">
+          <strong id="avg-delivery-charge">Cargando...</strong>
+          Promedio de deliveryCharge
+        </div>
+
+        <div class="metric-item">
+          <strong id="avg-service-tax">Cargando...</strong>
+          Promedio de serviceTax
+        </div>
+
+        <div class="metric-item">
+          <strong id="avg-hiding-index">Cargando...</strong>
+          Índice de ocultamiento promedio (deliveryCharge / serviceTax)
+        </div>
+      </div>
     </div>
 
     <div class="card">
       <h2>Índice de tolerancia promedio</h2>
       <div class="kpi" id="avg-tolerance">Cargando...</div>
-      <div class="subtext">Promedio de (Envío / Productos)</div>
+      <div class="subtext">Promedio de (deliveryCharge / total)</div>
     </div>
 
     <div class="card full-width">
@@ -251,23 +278,18 @@
 
       if (!str) return 0;
 
-      // Elimina símbolos comunes
       str = str.replace(/\$/g, "").replace(/\s/g, "");
 
-      // Si tiene coma decimal estilo LATAM
       const hasComma = str.includes(",");
       const hasDot = str.includes(".");
 
       if (hasComma && hasDot) {
-        // Asume formato tipo 1.234,56
         if (str.lastIndexOf(",") > str.lastIndexOf(".")) {
           str = str.replace(/\./g, "").replace(",", ".");
         } else {
-          // formato 1,234.56
           str = str.replace(/,/g, "");
         }
       } else if (hasComma && !hasDot) {
-        // Asume coma decimal
         str = str.replace(",", ".");
       }
 
@@ -312,8 +334,15 @@
         }
 
         let totalShippingSum = 0;
+        let deliveryChargeSum = 0;
+        let serviceTaxSum = 0;
+
         let toleranceSum = 0;
         let validToleranceCount = 0;
+
+        let hidingIndexSum = 0;
+        let validHidingIndexCount = 0;
+
         let processedRows = 0;
 
         const monthGroups = {};
@@ -327,12 +356,22 @@
           const shipping = serviceTax + deliveryCharge;
 
           totalShippingSum += shipping;
+          deliveryChargeSum += deliveryCharge;
+          serviceTaxSum += serviceTax;
           processedRows++;
 
+          // NUEVO índice de tolerancia: deliveryCharge / total
           if (total > 0) {
-            const toleranceIndex = shipping / total;
+            const toleranceIndex = deliveryCharge / total;
             toleranceSum += toleranceIndex;
             validToleranceCount++;
+          }
+
+          // NUEVO índice de ocultamiento: deliveryCharge / serviceTax
+          if (serviceTax > 0) {
+            const hidingIndex = deliveryCharge / serviceTax;
+            hidingIndexSum += hidingIndex;
+            validHidingIndexCount++;
           }
 
           if (!monthGroups[month]) {
@@ -347,10 +386,16 @@
         });
 
         const avgShipping = processedRows > 0 ? totalShippingSum / processedRows : 0;
+        const avgDeliveryCharge = processedRows > 0 ? deliveryChargeSum / processedRows : 0;
+        const avgServiceTax = processedRows > 0 ? serviceTaxSum / processedRows : 0;
         const avgTolerance = validToleranceCount > 0 ? toleranceSum / validToleranceCount : 0;
+        const avgHidingIndex = validHidingIndexCount > 0 ? hidingIndexSum / validHidingIndexCount : 0;
 
         // Mostrar KPIs
         document.getElementById("avg-shipping").textContent = formatCurrency(avgShipping);
+        document.getElementById("avg-delivery-charge").textContent = formatCurrency(avgDeliveryCharge);
+        document.getElementById("avg-service-tax").textContent = formatCurrency(avgServiceTax);
+        document.getElementById("avg-hiding-index").textContent = formatPercent(avgHidingIndex);
         document.getElementById("avg-tolerance").textContent = formatPercent(avgTolerance);
 
         // Mostrar tabla por mes
@@ -371,6 +416,8 @@
         sortedMonths.forEach((month) => {
           const group = monthGroups[month];
           const avgTotalForMonth = group.count > 0 ? group.totalSum / group.count : 0;
+
+          // NUEVO envío ideal usando el nuevo índice de tolerancia
           const idealShipping = avgTotalForMonth * avgTolerance;
 
           const tr = document.createElement("tr");
@@ -392,13 +439,26 @@
             <li>total → <strong>${headers[totalIndex]}</strong></li>
             <li>month → <strong>${headers[monthIndex]}</strong></li>
           </ul>
+
           <p><strong>Registros procesados:</strong> ${processedRows}</p>
-          <p><strong>Registros válidos para índice de tolerancia:</strong> ${validToleranceCount}</p>
+          <p><strong>Registros válidos para índice de tolerancia (deliveryCharge / total):</strong> ${validToleranceCount}</p>
+          <p><strong>Registros válidos para índice de ocultamiento (deliveryCharge / serviceTax):</strong> ${validHidingIndexCount}</p>
+
+          <p><strong>Promedios globales:</strong></p>
+          <ul>
+            <li>Envío promedio = <strong>${formatCurrency(avgShipping)}</strong></li>
+            <li>Promedio deliveryCharge = <strong>${formatCurrency(avgDeliveryCharge)}</strong></li>
+            <li>Promedio serviceTax = <strong>${formatCurrency(avgServiceTax)}</strong></li>
+            <li>Índice de ocultamiento promedio = <strong>${formatPercent(avgHidingIndex)}</strong></li>
+            <li>Índice de tolerancia promedio = <strong>${formatPercent(avgTolerance)}</strong></li>
+          </ul>
+
           <p><strong>Fórmulas usadas:</strong></p>
           <ul>
             <li>Envío = serviceTax + deliveryCharge</li>
-            <li>Índice de tolerancia = Envío / total</li>
-            <li>Envío ideal por mes = Promedio total del mes / (1 + Índice de tolerancia promedio)</li>
+            <li>Índice de tolerancia = deliveryCharge / total</li>
+            <li>Índice de ocultamiento = deliveryCharge / serviceTax</li>
+            <li>Envío ideal por mes = Promedio total del mes × Índice de tolerancia promedio</li>
           </ul>
         `;
       })
@@ -406,12 +466,17 @@
         console.error(error);
 
         document.getElementById("avg-shipping").textContent = "Error";
+        document.getElementById("avg-delivery-charge").textContent = "Error";
+        document.getElementById("avg-service-tax").textContent = "Error";
+        document.getElementById("avg-hiding-index").textContent = "Error";
         document.getElementById("avg-tolerance").textContent = "Error";
+
         document.getElementById("month-results").innerHTML = `
           <tr>
             <td colspan="4">No se pudieron procesar los datos: ${error.message}</td>
           </tr>
         `;
+
         document.getElementById("summary").innerHTML = `
           <span class="status error">Error al leer la hoja</span>
           <p>${error.message}</p>
