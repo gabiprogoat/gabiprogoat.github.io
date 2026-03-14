@@ -93,7 +93,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 480px;
+      min-width: 700px;
     }
 
     th, td {
@@ -193,7 +193,7 @@
 
         <div class="metric-item">
           <strong id="avg-cart-items">Cargando...</strong>
-          Promedio de cartItems válidos
+          Promedio de cartItems
         </div>
       </div>
     </div>
@@ -207,12 +207,14 @@
               <th>Mes (month)</th>
               <th>Registros</th>
               <th>Promedio total</th>
-              <th>Envío ideal</th>
+              <th>Promedio cartItems</th>
+              <th>Envío ideal a mostrar</th>
+              <th>Envío ideal real</th>
             </tr>
           </thead>
           <tbody id="month-results">
             <tr>
-              <td colspan="4">Cargando datos...</td>
+              <td colspan="6">Cargando datos...</td>
             </tr>
           </tbody>
         </table>
@@ -355,6 +357,7 @@
           throw new Error("No se encontraron datos en el archivo.");
         }
 
+        // serviceTax YA NO se toma del Excel: se calcula
         const grandTotalIndex = findColumnIndex(headers, ["grandTotal", "grand total"]);
         const discountIndex = findColumnIndex(headers, ["discount", "descuento"]);
         const deliveryChargeIndex = findColumnIndex(headers, ["deliveryCharge", "delivery charge"]);
@@ -377,9 +380,7 @@
         let totalShippingSum = 0;
         let deliveryChargeSum = 0;
         let serviceTaxSum = 0;
-
         let cartItemsSum = 0;
-        let validCartItemsCount = 0;
 
         // Índice original = deliveryCharge / total
         let toleranceSum = 0;
@@ -388,6 +389,10 @@
         // Índice total = Envío / total
         let totalShippingToleranceSum = 0;
         let validTotalShippingToleranceCount = 0;
+
+        // Índice original / cartItems
+        let tolerancePerCartItemSum = 0;
+        let validTolerancePerCartItemCount = 0;
 
         // % oculto = serviceTax / Envío
         let hidingIndexSum = 0;
@@ -414,13 +419,8 @@
           totalShippingSum += shipping;
           deliveryChargeSum += deliveryCharge;
           serviceTaxSum += serviceTax;
+          cartItemsSum += cartItems;
           processedRows++;
-
-          // Promedio de cartItems (solo válidos)
-          if (cartItems > 0) {
-            cartItemsSum += cartItems;
-            validCartItemsCount++;
-          }
 
           // Índice de tolerancia original = deliveryCharge / total
           if (total > 0) {
@@ -432,6 +432,13 @@
             const totalShippingToleranceIndex = shipping / total;
             totalShippingToleranceSum += totalShippingToleranceIndex;
             validTotalShippingToleranceCount++;
+
+            // Índice original / cartItems (CORREGIDO)
+            if (cartItems > 0) {
+              const tolerancePerCartItem = toleranceIndex / cartItems;
+              tolerancePerCartItemSum += tolerancePerCartItem;
+              validTolerancePerCartItemCount++;
+            }
           }
 
           // Índice de ocultamiento = serviceTax / Envío
@@ -444,31 +451,28 @@
           if (!monthGroups[month]) {
             monthGroups[month] = {
               count: 0,
-              totalSum: 0
+              totalSum: 0,
+              cartItemsSum: 0
             };
           }
 
           monthGroups[month].count++;
           monthGroups[month].totalSum += total;
+          monthGroups[month].cartItemsSum += cartItems;
         });
 
         const avgShipping = processedRows > 0 ? totalShippingSum / processedRows : 0;
         const avgDeliveryCharge = processedRows > 0 ? deliveryChargeSum / processedRows : 0;
         const avgServiceTax = processedRows > 0 ? serviceTaxSum / processedRows : 0;
-
-        const avgCartItems = validCartItemsCount > 0 ? cartItemsSum / validCartItemsCount : 0;
+        const avgCartItems = processedRows > 0 ? cartItemsSum / processedRows : 0;
 
         const avgTolerance = validToleranceCount > 0 ? toleranceSum / validToleranceCount : 0;
-
         const avgTotalShippingTolerance = validTotalShippingToleranceCount > 0
           ? totalShippingToleranceSum / validTotalShippingToleranceCount
           : 0;
-
-        // CÁLCULO CORRECTO: promedio original / promedio cartItems
-        const avgTolerancePerCartItem = avgCartItems > 0
-          ? avgTolerance / avgCartItems
+        const avgTolerancePerCartItem = validTolerancePerCartItemCount > 0
+          ? tolerancePerCartItemSum / validTolerancePerCartItemCount
           : 0;
-
         const avgHidingIndex = validHidingIndexCount > 0 ? hidingIndexSum / validHidingIndexCount : 0;
 
         // Mostrar KPIs
@@ -500,16 +504,24 @@
         sortedMonths.forEach((month) => {
           const group = monthGroups[month];
           const avgTotalForMonth = group.count > 0 ? group.totalSum / group.count : 0;
+          const avgCartItemsForMonth = group.count > 0 ? group.cartItemsSum / group.count : 0;
 
-          // Envío ideal usando el índice de tolerancia original
-          const idealShipping = avgTotalForMonth * avgTolerance;
+          // Envío ideal a mostrar (el cálculo que ya venías usando)
+          const idealShippingToShow = avgTotalForMonth * avgTolerance;
+
+          // Envío ideal real (desocultando el % escondido en serviceTax)
+          const idealShippingReal = (1 - avgHidingIndex) > 0
+            ? idealShippingToShow / (1 - avgHidingIndex)
+            : idealShippingToShow;
 
           const tr = document.createElement("tr");
           tr.innerHTML = `
             <td>${month}</td>
             <td>${group.count}</td>
             <td>${formatCurrency(avgTotalForMonth)}</td>
-            <td><strong>${formatCurrency(idealShipping)}</strong></td>
+            <td>${formatNumber(avgCartItemsForMonth)}</td>
+            <td><strong>${formatCurrency(idealShippingToShow)}</strong></td>
+            <td><strong>${formatCurrency(idealShippingReal)}</strong></td>
           `;
           tbody.appendChild(tr);
         });
@@ -529,7 +541,7 @@
           <p><strong>Registros procesados:</strong> ${processedRows}</p>
           <p><strong>Válidos para índice original (deliveryCharge / total):</strong> ${validToleranceCount}</p>
           <p><strong>Válidos para índice total (Envío / total):</strong> ${validTotalShippingToleranceCount}</p>
-          <p><strong>Válidos para promedio de cartItems:</strong> ${validCartItemsCount}</p>
+          <p><strong>Válidos para índice original / cartItems:</strong> ${validTolerancePerCartItemCount}</p>
           <p><strong>Válidos para índice de ocultamiento (serviceTax / Envío):</strong> ${validHidingIndexCount}</p>
 
           <p><strong>Promedios globales:</strong></p>
@@ -541,7 +553,7 @@
             <li>Índice de tolerancia original promedio = <strong>${formatPercent(avgTolerance)}</strong></li>
             <li>Índice de tolerancia de envío total promedio = <strong>${formatPercent(avgTotalShippingTolerance)}</strong></li>
             <li>Índice original / cartItems promedio = <strong>${formatPercent(avgTolerancePerCartItem)}</strong></li>
-            <li>Promedio cartItems válidos = <strong>${formatNumber(avgCartItems)}</strong></li>
+            <li>Promedio cartItems = <strong>${formatNumber(avgCartItems)}</strong></li>
           </ul>
 
           <p><strong>Fórmulas usadas:</strong></p>
@@ -551,8 +563,10 @@
             <li>% oculto del envío = serviceTax calculado / Envío</li>
             <li>Índice de tolerancia original = deliveryCharge / total</li>
             <li>Índice de tolerancia de envío total = Envío / total</li>
-            <li>Índice original / cartItems promedio = Índice de tolerancia original promedio / Promedio de cartItems válidos</li>
-            <li>Envío ideal por mes = Promedio total del mes × Índice de tolerancia original promedio</li>
+            <li>Índice de tolerancia original por producto = (deliveryCharge / total) / cartItems</li>
+            <li>Envío ideal a mostrar = Promedio total del mes × Índice de tolerancia original promedio</li>
+            <li>Envío ideal real = Envío ideal a mostrar / (1 - Índice de ocultamiento promedio)</li>
+            <li>Promedio cartItems por mes = Suma cartItems del mes / Registros del mes</li>
           </ul>
         `;
       })
@@ -571,7 +585,7 @@
 
         document.getElementById("month-results").innerHTML = `
           <tr>
-            <td colspan="4">No se pudieron procesar los datos: ${error.message}</td>
+            <td colspan="6">No se pudieron procesar los datos: ${error.message}</td>
           </tr>
         `;
 
