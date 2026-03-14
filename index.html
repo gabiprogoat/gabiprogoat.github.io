@@ -124,20 +124,20 @@
 </head>
 <body>
 
-  <header>V-GO • Análisis de Envíos</header>
-  <a class="nav-link" href="analisis.html">← Volver a análisis</a>
+  <header>V-GO papuuuu</header>
+  <a class="nav-link" href="analisis.html">Volver a análisis</a>
 
   <div class="container" id="dashboard-container">
     <div class="card">
       <h2>Envío promedio</h2>
       <div class="kpi" id="avg-shipping">Cargando...</div>
-      <div class="subtext">Promedio de (serviceTax + deliveryCharge)</div>
+      <div class="subtext">Promedio de tarifa de servicio + envio</div>
     </div>
 
     <div class="card">
       <h2>Índice de tolerancia promedio</h2>
       <div class="kpi" id="avg-tolerance">Cargando...</div>
-      <div class="subtext">Promedio de (Envío / total)</div>
+      <div class="subtext">Promedio de (Envío / Productos)</div>
     </div>
 
     <div class="card full-width">
@@ -371,7 +371,7 @@
         sortedMonths.forEach((month) => {
           const group = monthGroups[month];
           const avgTotalForMonth = group.count > 0 ? group.totalSum / group.count : 0;
-          const idealShipping = avgTotalForMonth / (1 + avgTolerance);
+          const idealShipping = avgTotalForMonth / (2 - avgTolerance);
 
           const tr = document.createElement("tr");
           tr.innerHTML = `
