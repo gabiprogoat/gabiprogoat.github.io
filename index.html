@@ -1,175 +1,423 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>V-GO Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-body {margin:0; font-family:system-ui,sans-serif; background:#f1f3f6;}
-header {padding:14px; background:#111827; color:white; text-align:center; font-size:1.1rem;}
-.container {padding:12px; display:grid; grid-template-columns:1fr; gap:14px;}
-.card {background:white; border-radius:16px; padding:14px; box-shadow:0 4px 14px rgba(0,0,0,.08);}
-.kpi {text-align:center; font-size:clamp(1.8rem,6vw,2.4rem); font-weight:700;}
-.task-list {margin-top:10px;}
-.task-item {display:inline-block; padding:4px 8px; margin:2px 2px 2px 0; border-radius:6px; color:white; font-weight:500; font-size:0.85rem;}
-.sin-comenzar {background:#dc2626;}
-.pendiente {background:#f59e0b;}
-.completadas {background:#16a34a;}
-.chart-container {position:relative; width:100%; height:260px;}
-.task-input {margin-top:10px; display:flex; gap:6px;}
-.task-input input {flex:1; padding:4px 8px; border-radius:6px; border:1px solid #ccc;}
-.task-input button {padding:4px 10px; border:none; border-radius:6px; background:#2563eb; color:white; cursor:pointer;}
-.task-input button:hover {background:#1d4ed8;}
-@media (min-width:768px){.container{grid-template-columns:repeat(2,1fr);}.chart-container{height:320px;}}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>V-GO Análisis de Envíos</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #f1f3f6;
+      color: #111827;
+    }
+
+    header {
+      padding: 14px;
+      background: #111827;
+      color: white;
+      text-align: center;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .nav-link {
+      display: inline-block;
+      margin: 12px;
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .container {
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.08);
+    }
+
+    .card h2 {
+      margin: 0 0 12px 0;
+      font-size: 1.1rem;
+    }
+
+    .kpi {
+      font-size: clamp(1.8rem, 6vw, 2.4rem);
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .subtext {
+      text-align: center;
+      color: #6b7280;
+      font-size: 0.95rem;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 480px;
+    }
+
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      font-size: 0.95rem;
+    }
+
+    th {
+      background: #f9fafb;
+      font-weight: 700;
+    }
+
+    .status {
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .ok {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .warn {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .small {
+      font-size: 0.9rem;
+      color: #6b7280;
+    }
+
+    @media (min-width: 900px) {
+      .container {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .full-width {
+        grid-column: 1 / -1;
+      }
+    }
+  </style>
 </head>
 <body>
 
-<header>V-GO Soporte Papuuuu</header>
-<a href="analisis.html">Análisis de datos</a>
-<div class="container" id="dashboard-container">
-  <!-- Gráficos globales -->
-  <div class="card"><div class="chart-container"><canvas id="donut"></canvas></div></div>
-  <div class="card"><div class="chart-container"><canvas id="bars"></canvas></div></div>
-</div>
+  <header>V-GO • Análisis de Envíos</header>
+  <a class="nav-link" href="analisis.html">← Volver a análisis</a>
 
-<script>
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDnVk25Z6U5952Acd06WnYKTOOA-BF8cYrUYn83Lcbw1Y68d_TzOsCBkAZnYgyskysf9v3oUl266u-/pub?output=csv";
-const WEB_APP_URL = "https://script.google.com/a/macros/vgo.com.ar/s/AKfycbyeu0lLHxeAy66P2mmVUVEnRSZRi4pxqV8W8rQ6KMIxNu8scgOoiH-UTeDVvixIw19y/exec";
+  <div class="container" id="dashboard-container">
+    <div class="card">
+      <h2>Envío promedio</h2>
+      <div class="kpi" id="avg-shipping">Cargando...</div>
+      <div class="subtext">Promedio de (serviceTax + deliveryCharge)</div>
+    </div>
 
-function parseCSV(text){
-  let delimiter = text.includes("\t") ? "\t" : ","; 
-  const lines = text.split(/\r?\n/).filter(l=>l.trim()!=="");
-  const headers = lines[0].split(delimiter).map(h=>h.replace(/^"|"$/g,"").trim());
-  const rows = lines.slice(1).map(line=>line.split(delimiter).map(c=>c.replace(/^"|"$/g,"").trim()));
-  return { headers, rows };
-}
+    <div class="card">
+      <h2>Índice de tolerancia promedio</h2>
+      <div class="kpi" id="avg-tolerance">Cargando...</div>
+      <div class="subtext">Promedio de (Envío / total)</div>
+    </div>
 
-fetch(SHEET_URL)
-.then(r=>r.text())
-.then(csv=>{
-  const { headers, rows } = parseCSV(csv);
-  const container = document.getElementById("dashboard-container");
+    <div class="card full-width">
+      <h2>Envío ideal por mes</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Mes (month)</th>
+              <th>Registros</th>
+              <th>Promedio total</th>
+              <th>Envío ideal</th>
+            </tr>
+          </thead>
+          <tbody id="month-results">
+            <tr>
+              <td colspan="4">Cargando datos...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-  const taskPairs = [];
-  for(let i=0;i<headers.length;i++){
-    const h = headers[i];
-    if(h.includes("(C)") || /Datos/i.test(h)) continue;
-    if(i+1 < headers.length && headers[i+1].toLowerCase().includes("estado")){
-      taskPairs.push({ taskColIndex:i, taskColName:h, statusColIndex:i+1 });
-      i++;
+    <div class="card full-width">
+      <h2>Resumen técnico</h2>
+      <div id="summary" class="small">Procesando...</div>
+    </div>
+  </div>
+
+  <script>
+    const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRXNYuyidgf_vcIvVrdj-lk2hbQLt-fBJMEPwXqa-KQCJkqY43d3Zr2U5co_XVpognNxUcgAPwd1c57/pub?output=csv";
+
+    function parseCSV(text) {
+      const delimiter = text.includes("\t") ? "\t" : ",";
+      const lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
+
+      if (!lines.length) return { headers: [], rows: [] };
+
+      const headers = splitCSVLine(lines[0], delimiter).map(h => cleanCell(h));
+      const rows = lines.slice(1).map(line => splitCSVLine(line, delimiter).map(c => cleanCell(c)));
+
+      return { headers, rows };
     }
-  }
 
-  if(taskPairs.length===0){ alert("No se detectaron columnas de tareas."); return; }
+    function splitCSVLine(line, delimiter) {
+      const result = [];
+      let current = "";
+      let inQuotes = false;
 
-  let globalCounts = { completadas:0, pendientes:0, sinComenzar:0 };
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const next = line[i + 1];
 
-  taskPairs.forEach(pair=>{
-    const tasks=[];
-    let counts={ completadas:0, pendientes:0, sinComenzar:0 };
+        if (char === '"') {
+          if (inQuotes && next === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === delimiter && !inQuotes) {
+          result.push(current);
+          current = "";
+        } else {
+          current += char;
+        }
+      }
 
-    rows.forEach(row=>{
-      const name = row[pair.taskColIndex];
-      if(!name) return;
+      result.push(current);
+      return result;
+    }
 
-      const s = (row[pair.statusColIndex]||"").trim();
-      let status="Sin Comenzar";
-      if(/Completado/i.test(s)) status="Completadas";
-      else if(/Pendiente/i.test(s)) status="Pendiente";
+    function cleanCell(value) {
+      return String(value || "")
+        .replace(/^"|"$/g, "")
+        .trim();
+    }
 
-      tasks.push({name,status});
+    function normalizeHeader(str) {
+      return String(str || "")
+        .toLowerCase()
+        .replace(/\s+/g, "")
+        .replace(/[_-]/g, "");
+    }
 
-      if(status==="Completadas") counts.completadas++;
-      else if(status==="Pendiente") counts.pendientes++;
-      else counts.sinComenzar++;
-    });
+    function findColumnIndex(headers, possibleNames) {
+      const normalizedHeaders = headers.map(normalizeHeader);
 
-    globalCounts.completadas += counts.completadas;
-    globalCounts.pendientes += counts.pendientes;
-    globalCounts.sinComenzar += counts.sinComenzar;
+      for (const name of possibleNames) {
+        const normalizedName = normalizeHeader(name);
+        const exactIndex = normalizedHeaders.indexOf(normalizedName);
+        if (exactIndex !== -1) return exactIndex;
+      }
 
-    const total = counts.completadas + counts.pendientes + counts.sinComenzar;
-    const percent = total ? Math.round(counts.completadas/total*100) : 0;
+      for (let i = 0; i < normalizedHeaders.length; i++) {
+        for (const name of possibleNames) {
+          const normalizedName = normalizeHeader(name);
+          if (normalizedHeaders[i].includes(normalizedName) || normalizedName.includes(normalizedHeaders[i])) {
+            return i;
+          }
+        }
+      }
 
-    const card = document.createElement("div");
-    card.className="card";
-    card.innerHTML = `<div class="kpi"><strong>${percent}%</strong></div>
-                      <span>${pair.taskColName}</span>
-                      <div class="task-list"></div>`;
-    container.appendChild(card);
+      return -1;
+    }
 
-    const taskList = card.querySelector(".task-list");
-    ["Sin Comenzar","Pendiente","Completadas"].forEach(status=>{
-      tasks.filter(t=>t.status===status).forEach(task=>{
-        const span = document.createElement("span");
-        span.className="task-item "+status.toLowerCase().replace(" ","-");
-        span.innerText = task.name;
-        taskList.appendChild(span);
-      });
-    });
+    function parseNumber(value) {
+      if (value === null || value === undefined) return 0;
 
-    const taskInputDiv = document.createElement("div");
-    taskInputDiv.className="task-input";
-    taskInputDiv.innerHTML = `<input type="text" placeholder="Nueva tarea..." class="new-task-name">
-                              <button class="add-task-btn">Agregar tarea</button>`;
-    card.appendChild(taskInputDiv);
+      let str = String(value).trim();
 
-    const button = taskInputDiv.querySelector(".add-task-btn");
-    const input = taskInputDiv.querySelector(".new-task-name");
+      if (!str) return 0;
 
-    button.addEventListener("click", ()=>{
-      const name = input.value.trim();
-      if(!name) return alert("Escribí un nombre para la tarea.");
+      // Elimina símbolos comunes
+      str = str.replace(/\$/g, "").replace(/\s/g, "");
 
-      fetch(WEB_APP_URL, {
-        method:"POST",
-        body: JSON.stringify({ columnName: pair.taskColName, taskName: name }),
-        headers: {"Content-Type":"application/json"}
+      // Si tiene coma decimal estilo LATAM
+      const hasComma = str.includes(",");
+      const hasDot = str.includes(".");
+
+      if (hasComma && hasDot) {
+        // Asume formato tipo 1.234,56
+        if (str.lastIndexOf(",") > str.lastIndexOf(".")) {
+          str = str.replace(/\./g, "").replace(",", ".");
+        } else {
+          // formato 1,234.56
+          str = str.replace(/,/g, "");
+        }
+      } else if (hasComma && !hasDot) {
+        // Asume coma decimal
+        str = str.replace(",", ".");
+      }
+
+      const num = parseFloat(str);
+      return isNaN(num) ? 0 : num;
+    }
+
+    function formatCurrency(value) {
+      return new Intl.NumberFormat("es-AR", {
+        style: "currency",
+        currency: "ARS",
+        maximumFractionDigits: 2
+      }).format(value);
+    }
+
+    function formatPercent(value) {
+      return (value * 100).toFixed(2) + "%";
+    }
+
+    fetch(SHEET_URL)
+      .then(response => response.text())
+      .then(csv => {
+        const { headers, rows } = parseCSV(csv);
+
+        if (!headers.length || !rows.length) {
+          throw new Error("No se encontraron datos en el archivo.");
+        }
+
+        const serviceTaxIndex = findColumnIndex(headers, ["serviceTax", "service tax"]);
+        const deliveryChargeIndex = findColumnIndex(headers, ["deliveryCharge", "delivery charge"]);
+        const totalIndex = findColumnIndex(headers, ["total"]);
+        const monthIndex = findColumnIndex(headers, ["month", "mes"]);
+
+        if ([serviceTaxIndex, deliveryChargeIndex, totalIndex, monthIndex].includes(-1)) {
+          const missing = [];
+          if (serviceTaxIndex === -1) missing.push("serviceTax");
+          if (deliveryChargeIndex === -1) missing.push("deliveryCharge");
+          if (totalIndex === -1) missing.push("total");
+          if (monthIndex === -1) missing.push("month");
+
+          throw new Error("Faltan columnas requeridas: " + missing.join(", "));
+        }
+
+        let totalShippingSum = 0;
+        let toleranceSum = 0;
+        let validToleranceCount = 0;
+        let processedRows = 0;
+
+        const monthGroups = {};
+
+        rows.forEach((row) => {
+          const serviceTax = parseNumber(row[serviceTaxIndex]);
+          const deliveryCharge = parseNumber(row[deliveryChargeIndex]);
+          const total = parseNumber(row[totalIndex]);
+          const month = cleanCell(row[monthIndex]) || "Sin mes";
+
+          const shipping = serviceTax + deliveryCharge;
+
+          totalShippingSum += shipping;
+          processedRows++;
+
+          if (total > 0) {
+            const toleranceIndex = shipping / total;
+            toleranceSum += toleranceIndex;
+            validToleranceCount++;
+          }
+
+          if (!monthGroups[month]) {
+            monthGroups[month] = {
+              count: 0,
+              totalSum: 0
+            };
+          }
+
+          monthGroups[month].count++;
+          monthGroups[month].totalSum += total;
+        });
+
+        const avgShipping = processedRows > 0 ? totalShippingSum / processedRows : 0;
+        const avgTolerance = validToleranceCount > 0 ? toleranceSum / validToleranceCount : 0;
+
+        // Mostrar KPIs
+        document.getElementById("avg-shipping").textContent = formatCurrency(avgShipping);
+        document.getElementById("avg-tolerance").textContent = formatPercent(avgTolerance);
+
+        // Mostrar tabla por mes
+        const tbody = document.getElementById("month-results");
+        tbody.innerHTML = "";
+
+        const sortedMonths = Object.keys(monthGroups).sort((a, b) => {
+          const numA = parseNumber(a);
+          const numB = parseNumber(b);
+
+          if (!isNaN(numA) && !isNaN(numB) && numA !== 0 && numB !== 0) {
+            return numA - numB;
+          }
+
+          return String(a).localeCompare(String(b), "es");
+        });
+
+        sortedMonths.forEach((month) => {
+          const group = monthGroups[month];
+          const avgTotalForMonth = group.count > 0 ? group.totalSum / group.count : 0;
+          const idealShipping = avgTotalForMonth / (1 + avgTolerance);
+
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${month}</td>
+            <td>${group.count}</td>
+            <td>${formatCurrency(avgTotalForMonth)}</td>
+            <td><strong>${formatCurrency(idealShipping)}</strong></td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        // Resumen técnico
+        document.getElementById("summary").innerHTML = `
+          <p><strong>Columnas detectadas:</strong></p>
+          <ul>
+            <li>serviceTax → <strong>${headers[serviceTaxIndex]}</strong></li>
+            <li>deliveryCharge → <strong>${headers[deliveryChargeIndex]}</strong></li>
+            <li>total → <strong>${headers[totalIndex]}</strong></li>
+            <li>month → <strong>${headers[monthIndex]}</strong></li>
+          </ul>
+          <p><strong>Registros procesados:</strong> ${processedRows}</p>
+          <p><strong>Registros válidos para índice de tolerancia:</strong> ${validToleranceCount}</p>
+          <p><strong>Fórmulas usadas:</strong></p>
+          <ul>
+            <li>Envío = serviceTax + deliveryCharge</li>
+            <li>Índice de tolerancia = Envío / total</li>
+            <li>Envío ideal por mes = Promedio total del mes / (1 + Índice de tolerancia promedio)</li>
+          </ul>
+        `;
       })
-      .then(r=>r.text()) // <-- cambiar de .json() a .text()
-      .then(text=>{
-        let res;
-        try{ res = JSON.parse(text); }catch(e){ res={success:false,error:"Respuesta inválida"} }
+      .catch(error => {
+        console.error(error);
 
-        alert(res.success ? "Tarea agregada con éxito!" : (res.error||"Error al agregar la tarea"));
-        input.value=""; // siempre vacía el input
-        if(res.success) location.reload();
-      })
-      .catch(err=>{
-        console.error(err);
-        alert("Error al conectar con la Web App");
-        input.value="";
+        document.getElementById("avg-shipping").textContent = "Error";
+        document.getElementById("avg-tolerance").textContent = "Error";
+        document.getElementById("month-results").innerHTML = `
+          <tr>
+            <td colspan="4">No se pudieron procesar los datos: ${error.message}</td>
+          </tr>
+        `;
+        document.getElementById("summary").innerHTML = `
+          <span class="status error">Error al leer la hoja</span>
+          <p>${error.message}</p>
+        `;
       });
-    });
-
-  });
-
-  // Gráficos globales
-  new Chart(document.getElementById("donut"), {
-    type:"doughnut",
-    data:{
-      labels:["Completadas","Pendientes","Sin comenzar"],
-      datasets:[{ data:[globalCounts.completadas, globalCounts.pendientes, globalCounts.sinComenzar],
-                  backgroundColor:["#16a34a","#f59e0b","#dc2626"] }]
-    },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}} }
-  });
-
-  new Chart(document.getElementById("bars"), {
-    type:"bar",
-    data:{
-      labels:["Completadas","Pendientes","Sin comenzar"],
-      datasets:[{ data:[globalCounts.completadas, globalCounts.pendientes, globalCounts.sinComenzar] }]
-    },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
-  });
-
-});
-</script>
+  </script>
 
 </body>
 </html>
-
-
