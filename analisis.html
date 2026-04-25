@@ -58,6 +58,35 @@ function saveConfig(){
   localStorage.setItem("mergedWords", JSON.stringify(mergedWords));
 }
 
+// === HELPERS (igual que tu sistema original) ===
+function normalizeHeader(str){
+  return String(str || "")
+    .toLowerCase()
+    .replace(/\s+/g,"")
+    .replace(/[_-]/g,"");
+}
+
+function findColumnIndex(headers, possibleNames){
+  const normalizedHeaders = headers.map(normalizeHeader);
+
+  for(const name of possibleNames){
+    const normalizedName = normalizeHeader(name);
+    const exactIndex = normalizedHeaders.indexOf(normalizedName);
+    if(exactIndex !== -1) return exactIndex;
+  }
+
+  for(let i=0;i<normalizedHeaders.length;i++){
+    for(const name of possibleNames){
+      const normalizedName = normalizeHeader(name);
+      if(normalizedHeaders[i].includes(normalizedName)){
+        return i;
+      }
+    }
+  }
+
+  return -1;
+}
+
 // === CSV ===
 function parseCSV(text){
   const lines = text.split(/\r?\n/).filter(l=>l.trim());
@@ -72,7 +101,14 @@ fetch(SHEET_URL)
 .then(csv=>{
   const {headers, rows} = parseCSV(csv);
 
-  const index = headers.findIndex(h=>h.toLowerCase().includes("venue"));
+  // 🔥 AHORA SÍ: SOLO venueCusine
+  const index = findColumnIndex(headers, ["venueCusine", "venue cuisine"]);
+
+  if(index === -1){
+    document.getElementById("cuisine-results").innerHTML =
+      "<p>No se encontró la columna venueCusine.</p>";
+    return;
+  }
 
   let counts = {};
 
@@ -83,10 +119,7 @@ fetch(SHEET_URL)
       word = word.trim();
       if(!word) return;
 
-      // aplicar merge
       if(mergedWords[word]) word = mergedWords[word];
-
-      // ignorar removidos
       if(removedWords.includes(word)) return;
 
       counts[word] = (counts[word]||0)+1;
@@ -117,14 +150,12 @@ function render(counts){
       </div>
     `;
 
-    // eliminar
     div.querySelector(".btn-remove").onclick = ()=>{
       removedWords.push(word);
       saveConfig();
       location.reload();
     };
 
-    // merge
     div.querySelector(".btn-merge").onclick = ()=>{
       const target = prompt("Unificar '" + word + "' con:");
       if(!target) return;
