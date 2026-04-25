@@ -3,166 +3,141 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Análisis de datos (CSV público)</title>
+<title>V-GO Análisis de Envíos</title>
+
 <style>
 body{margin:0;font-family:system-ui,sans-serif;background:#f1f3f6;}
-header{background:#111827;color:white;padding:14px;text-align:center;}
-.container{padding:14px;display:grid;gap:14px;}
-.card{background:white;border-radius:14px;padding:14px;box-shadow:0 4px 14px rgba(0,0,0,.08);}
-select,input,button{padding:6px 8px;border-radius:6px;border:1px solid #ccc;}
-button{background:#2563eb;color:white;border:none;cursor:pointer;}
-button:hover{background:#1d4ed8;}
-.result{font-size:.9rem;border-bottom:1px solid #eee;padding:6px 0;}
-.back{color:#2563eb;text-decoration:none;font-weight:600;}
+header{background:#111827;color:white;padding:14px;text-align:center;font-weight:700;}
+.container{padding:12px;display:grid;gap:14px;}
+.card{background:white;border-radius:16px;padding:14px;box-shadow:0 4px 14px rgba(0,0,0,.08);}
+.small{font-size:.85rem;color:#6b7280;}
+
+.word-item{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:6px 0;
+  border-bottom:1px solid #eee;
+}
+
+.word-actions button{
+  margin-left:6px;
+  border:none;
+  border-radius:6px;
+  padding:4px 6px;
+  cursor:pointer;
+}
+
+.btn-remove{background:#fee2e2;}
+.btn-merge{background:#dbeafe;}
 </style>
 </head>
+
 <body>
-<header>Análisis de datos (CSV público)</header>
+
+<header>V-GO papuuuu</header>
 
 <div class="container">
 
 <div class="card">
-  <a href="index.html" class="back">← Volver</a>
-</div>
-
-<div class="card">
-  <h3>Añadir CSV público (primera hoja)</h3>
-  <input id="csvUrl" placeholder="URL CSV público">
-  <button onclick="addDoc()">Añadir</button>
-</div>
-
-<div class="card">
-  <h3>Selección A</h3>
-  <select id="docA" onchange="loadColumns('A')"></select>
-  <select id="colA"></select>
-</div>
-
-<div class="card">
-  <h3>Selección B</h3>
-  <select id="docB" onchange="loadColumns('B')"></select>
-  <select id="colB"></select>
-</div>
-
-<div class="card">
-  <button onclick="analyze()">Analizar</button>
-</div>
-
-<div class="card">
-  <h3>Resultado</h3>
-  <div id="results"></div>
+<h2>Palabras más repetidas (venueCusine)</h2>
+<div id="cuisine-results">Cargando...</div>
 </div>
 
 </div>
 
 <script>
-// === STORAGE ===
-const docs = JSON.parse(localStorage.getItem("csv_docs") || "[]");
-const save=()=>localStorage.setItem("csv_docs",JSON.stringify(docs));
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT8ONDwd70dk_MAYCAtVr2LC6PllKUt4A_4W0ClsbyCh01GvxVeLleM1hQyL8L0fGA2ARTUMxw_alBn/pub?output=csv";
 
-// === HELPERS ===
+// === STORAGE ===
+let removedWords = JSON.parse(localStorage.getItem("removedWords") || "[]");
+let mergedWords = JSON.parse(localStorage.getItem("mergedWords") || "{}");
+
+function saveConfig(){
+  localStorage.setItem("removedWords", JSON.stringify(removedWords));
+  localStorage.setItem("mergedWords", JSON.stringify(mergedWords));
+}
+
+// === CSV ===
 function parseCSV(text){
-  let delimiter = text.includes("\t") ? "\t" : ",";
-  const lines = text.split(/\r?\n/).filter(l=>l.trim()!=="");
-  const headers = lines[0].split(delimiter).map(h=>h.trim());
-  const rows = lines.slice(1).map(line=>line.split(delimiter));
+  const lines = text.split(/\r?\n/).filter(l=>l.trim());
+  const headers = lines[0].split(",");
+  const rows = lines.slice(1).map(l=>l.split(","));
   return {headers, rows};
 }
 
-function parseNumber(v){
-  if(!v) return NaN;
-  v=v.toString().replace(/[^\d.,-]/g,"");
-  if(v.includes(",") && v.includes(".")){
-    v=v.lastIndexOf(",")>v.lastIndexOf(".")?v.replace(/\./g,"").replace(",","."):v.replace(/,/g,"");
-  } else if(v.includes(",")) v=v.replace(",",".");
-  return parseFloat(v);
-}
+// === MAIN ===
+fetch(SHEET_URL)
+.then(r=>r.text())
+.then(csv=>{
+  const {headers, rows} = parseCSV(csv);
 
-// === LOAD DOC ===
-function addDoc(){
-  const url=document.getElementById("csvUrl").value.trim();
-  if(!url) return alert("Ingresá un link CSV público");
-  fetch(url)
-    .then(r=>r.text())
-    .then(text=>{
-      const {headers, rows} = parseCSV(text);
-      docs.push({url, headers, rows});
-      save();
-      updateDocs();
-      document.getElementById("csvUrl").value="";
-    })
-    .catch(()=>alert("No se pudo cargar el CSV. Revisá que sea público."));
-}
+  const index = headers.findIndex(h=>h.toLowerCase().includes("venue"));
 
-function updateDocs(){
-  ["A","B"].forEach(t=>{
-    const s=document.getElementById("doc"+t);
-    s.innerHTML="";
-    docs.forEach((d,i)=>s.add(new Option(`CSV ${i+1}`,i)));
-    loadColumns(t);
+  let counts = {};
+
+  rows.forEach(row=>{
+    let text = (row[index]||"").toLowerCase();
+
+    text.split(/[\s,;|/]+/).forEach(word=>{
+      word = word.trim();
+      if(!word) return;
+
+      // aplicar merge
+      if(mergedWords[word]) word = mergedWords[word];
+
+      // ignorar removidos
+      if(removedWords.includes(word)) return;
+
+      counts[word] = (counts[word]||0)+1;
+    });
+  });
+
+  render(counts);
+});
+
+function render(counts){
+  const container = document.getElementById("cuisine-results");
+
+  let sorted = Object.entries(counts)
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,20);
+
+  container.innerHTML = "";
+
+  sorted.forEach(([word,count])=>{
+    const div = document.createElement("div");
+    div.className = "word-item";
+
+    div.innerHTML = `
+      <span><strong>${word}</strong>: ${count}</span>
+      <div class="word-actions">
+        <button class="btn-remove">❌</button>
+        <button class="btn-merge">🔗</button>
+      </div>
+    `;
+
+    // eliminar
+    div.querySelector(".btn-remove").onclick = ()=>{
+      removedWords.push(word);
+      saveConfig();
+      location.reload();
+    };
+
+    // merge
+    div.querySelector(".btn-merge").onclick = ()=>{
+      const target = prompt("Unificar '" + word + "' con:");
+      if(!target) return;
+
+      mergedWords[word] = target.toLowerCase();
+      saveConfig();
+      location.reload();
+    };
+
+    container.appendChild(div);
   });
 }
-
-function loadColumns(t){
-  const d = docs[document.getElementById("doc"+t).value];
-  const c = document.getElementById("col"+t);
-  c.innerHTML="";
-  d.headers.forEach((h,i)=>c.add(new Option(h,i)));
-}
-
-// === ANALYZE ===
-function analyze(){
-  const a = docs[docA.value], b = docs[docB.value];
-  const max = Math.max(a.rows.length, b.rows.length);
-  const out = document.getElementById("results");
-  out.innerHTML="";
-
-  for(let i=0;i<max;i++){
-    const vA=a.rows[i]?.[colA.value]||"";
-    const vB=b.rows[i]?.[colB.value]||"";
-
-    const nA=parseNumber(vA), nB=parseNumber(vB);
-    const isNumA=!isNaN(nA), isNumB=!isNaN(nB);
-
-    let res;
-    if(isNumA && isNumB) res = nA>nB?`A es mayor (${nA} > ${nB})`:nB>nA?`B es mayor (${nB} > ${nA})`:"Iguales";
-    else if(isNumA) res = "A es numérico y B no";
-    else if(isNumB) res = "B es numérico y A no";
-    else res = vA.length>vB.length?"A tiene más letras":vB.length>vA.length?"B tiene más letras":"Iguales";
-
-    out.innerHTML+=`<div class="result">Fila ${i+2}: ${res}</div>`;
-
-      // === PALABRAS MÁS REPETIDAS EN venueCusine ===
-  let cuisineIndex = a.headers.findIndex(h => h.toLowerCase() === "venuecusine");
-
-  if(cuisineIndex !== -1){
-    let wordCount = {};
-
-    a.rows.forEach(row => {
-      let text = row[cuisineIndex] || "";
-      text.toLowerCase().split(/[\s,;]+/).forEach(word => {
-        word = word.trim();
-        if(word){
-          wordCount[word] = (wordCount[word] || 0) + 1;
-        }
-      });
-    });
-
-    // ordenar por frecuencia
-    let sorted = Object.entries(wordCount)
-      .sort((a,b)=>b[1]-a[1])
-      .slice(0,10); // top 10
-
-    out.innerHTML += `<div class="card"><h3>Palabras más repetidas en venueCusine</h3></div>`;
-
-    sorted.forEach(([word,count])=>{
-      out.innerHTML += `<div class="result">${word}: ${count} veces</div>`;
-    });
-  }
-  }
-}
-
-// Inicializar selects
-updateDocs();
 </script>
+
 </body>
 </html>
