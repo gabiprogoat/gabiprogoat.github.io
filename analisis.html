@@ -130,6 +130,34 @@ function analyze(){
     else res = vA.length>vB.length?"A tiene más letras":vB.length>vA.length?"B tiene más letras":"Iguales";
 
     out.innerHTML+=`<div class="result">Fila ${i+2}: ${res}</div>`;
+
+      // === PALABRAS MÁS REPETIDAS EN venueCusine ===
+  let cuisineIndex = a.headers.findIndex(h => h.toLowerCase() === "venuecusine");
+
+  if(cuisineIndex !== -1){
+    let wordCount = {};
+
+    a.rows.forEach(row => {
+      let text = row[cuisineIndex] || "";
+      text.toLowerCase().split(/[\s,;]+/).forEach(word => {
+        word = word.trim();
+        if(word){
+          wordCount[word] = (wordCount[word] || 0) + 1;
+        }
+      });
+    });
+
+    // ordenar por frecuencia
+    let sorted = Object.entries(wordCount)
+      .sort((a,b)=>b[1]-a[1])
+      .slice(0,10); // top 10
+
+    out.innerHTML += `<div class="card"><h3>Palabras más repetidas en venueCusine</h3></div>`;
+
+    sorted.forEach(([word,count])=>{
+      out.innerHTML += `<div class="result">${word}: ${count} veces</div>`;
+    });
+  }
   }
 }
 
