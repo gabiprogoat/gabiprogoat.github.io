@@ -3,38 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>V-GO Análisis de Envíos</title>
+<title>V-GO Análisis</title>
 
 <style>
-body{margin:0;font-family:system-ui,sans-serif;background:#f1f3f6;}
-header{background:#111827;color:white;padding:14px;text-align:center;font-weight:700;}
+body{margin:0;font-family:system-ui;background:#f1f3f6;}
+header{background:#111827;color:#fff;padding:14px;text-align:center;font-weight:700;}
 .container{padding:12px;display:grid;gap:14px;}
-.card{background:white;border-radius:16px;padding:14px;box-shadow:0 4px 14px rgba(0,0,0,.08);}
+.card{background:#fff;border-radius:16px;padding:14px;box-shadow:0 4px 14px rgba(0,0,0,.08);}
 
-.word-item{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:6px 0;
-  border-bottom:1px solid #eee;
-}
-
-.word-actions button{
-  margin-left:6px;
-  border:none;
-  border-radius:6px;
-  padding:4px 6px;
-  cursor:pointer;
-}
-
+.word-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee;}
+.word-actions button{margin-left:6px;border:none;border-radius:6px;padding:4px 6px;cursor:pointer;}
 .btn-remove{background:#fee2e2;}
 .btn-merge{background:#dbeafe;}
 
-.category{
-  font-size:.8rem;
-  color:#2563eb;
-  margin-left:6px;
-}
+select,button{padding:6px;border-radius:6px;border:1px solid #ccc;}
+.category-count{font-size:.8rem;color:#2563eb;}
 </style>
 </head>
 
@@ -43,53 +26,50 @@ header{background:#111827;color:white;padding:14px;text-align:center;font-weight
 <header>V-GO papuuuu</header>
 
 <div class="container">
+
+<div class="card">
+<h2>Clasificación manual</h2>
+
+<select id="wordSelect"></select>
+<select id="categorySelect"></select>
+<button onclick="assignCategory()">Asignar</button>
+
+<div id="categoryCounts" class="category-count"></div>
+</div>
+
 <div class="card">
 <h2>Palabras más repetidas (venueCusine)</h2>
-<div id="cuisine-results">Cargando...</div>
+<div id="cuisine-results"></div>
 </div>
+
 </div>
 
 <script>
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT8ONDwd70dk_MAYCAtVr2LC6PllKUt4A_4W0ClsbyCh01GvxVeLleM1hQyL8L0fGA2ARTUMxw_alBn/pub?output=csv";
 
-// === CATEGORÍAS ===
 const CATEGORIES = [
-"Hamburguesas y Sandwiches",
-"Pizzas y Empanadas",
-"Sushi",
-"Comidas al Plato",
-"Pastas",
-"Sano",
-"Cafetería y dulce",
-"Postres",
-"Helado",
-"Almacén",
-"Bebidas"
+"Hamburguesas y Sandwiches","Pizzas y Empanadas","Sushi",
+"Comidas al Plato","Pastas","Sano","Cafetería y dulce",
+"Postres","Helado","Almacén","Bebidas"
 ];
 
-// === STORAGE ===
-let removedWords = JSON.parse(localStorage.getItem("removedWords") || "[]");
-let mergedWords = JSON.parse(localStorage.getItem("mergedWords") || "{}");
-let categorizedWords = JSON.parse(localStorage.getItem("categorizedWords") || "{}");
+let removedWords = JSON.parse(localStorage.getItem("removedWords")||"[]");
+let mergedWords = JSON.parse(localStorage.getItem("mergedWords")||"{}");
+let categorizedWords = JSON.parse(localStorage.getItem("categorizedWords")||"{}");
 
-function saveConfig(){
-  localStorage.setItem("removedWords", JSON.stringify(removedWords));
-  localStorage.setItem("mergedWords", JSON.stringify(mergedWords));
-  localStorage.setItem("categorizedWords", JSON.stringify(categorizedWords));
+function save(){
+  localStorage.setItem("removedWords",JSON.stringify(removedWords));
+  localStorage.setItem("mergedWords",JSON.stringify(mergedWords));
+  localStorage.setItem("categorizedWords",JSON.stringify(categorizedWords));
 }
 
-// === HELPERS ===
-function normalizeHeader(str){
-  return String(str||"").toLowerCase().replace(/\s+/g,"").replace(/[_-]/g,"");
+function normalizeHeader(s){
+  return s.toLowerCase().replace(/\s+/g,"").replace(/[_-]/g,"");
 }
 
-function findColumnIndex(headers,names){
+function findColumn(headers){
   const norm=headers.map(normalizeHeader);
-  for(const n of names){
-    const i=norm.indexOf(normalizeHeader(n));
-    if(i!==-1) return i;
-  }
-  return -1;
+  return norm.indexOf("venuecusine");
 }
 
 function parseCSV(text){
@@ -99,93 +79,113 @@ function parseCSV(text){
   return {headers,rows};
 }
 
-// === CLASIFICACIÓN ===
-function askCategory(word){
-  let msg = `¿A qué categoría pertenece "${word}"?\n\n`;
-  CATEGORIES.forEach((c,i)=> msg += `${i+1}. ${c}\n`);
+let globalCounts={};
 
-  let choice = prompt(msg);
-
-  let index = parseInt(choice)-1;
-
-  if(!isNaN(index) && CATEGORIES[index]){
-    categorizedWords[word] = CATEGORIES[index];
-    saveConfig();
-  }
-}
-
-// === MAIN ===
 fetch(SHEET_URL)
 .then(r=>r.text())
 .then(csv=>{
   const {headers,rows}=parseCSV(csv);
-
-  const index = findColumnIndex(headers, ["venueCusine","venue cuisine"]);
+  const index=findColumn(headers);
 
   let counts={};
 
-  rows.forEach(row=>{
-    let text=(row[index]||"").toLowerCase();
+  rows.forEach(r=>{
+    let text=(r[index]||"").toLowerCase();
 
-    text.split(/[\s,;|/]+/).forEach(word=>{
-      word=word.trim();
-      if(!word) return;
+    text.split(/[\s,;|/]+/).forEach(w=>{
+      w=w.trim();
+      if(!w) return;
 
-      if(mergedWords[word]) word=mergedWords[word];
-      if(removedWords.includes(word)) return;
+      if(mergedWords[w]) w=mergedWords[w];
+      if(removedWords.includes(w)) return;
 
-      if(!categorizedWords[word]){
-        askCategory(word); // 🔥 pregunta una vez
-      }
-
-      counts[word]=(counts[word]||0)+1;
+      counts[w]=(counts[w]||0)+1;
     });
   });
 
-  render(counts);
+  globalCounts=counts;
+  render();
+  loadSelectors();
+  updateCategoryCounts();
 });
 
-function render(counts){
-  const container=document.getElementById("cuisine-results");
+function render(){
+  const c=document.getElementById("cuisine-results");
+  c.innerHTML="";
 
-  let sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,20);
+  Object.entries(globalCounts)
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,20)
+    .forEach(([w,count])=>{
+      const cat = categorizedWords[w] || "Sin categoría";
 
-  container.innerHTML="";
+      const div=document.createElement("div");
+      div.className="word-item";
 
-  sorted.forEach(([word,count])=>{
-    const category = categorizedWords[word] || "Sin categoría";
+      div.innerHTML=`
+        <span><strong>${w}</strong>: ${count} (${cat})</span>
+        <div class="word-actions">
+          <button class="btn-remove">❌</button>
+          <button class="btn-merge">🔗</button>
+        </div>
+      `;
 
-    const div=document.createElement("div");
-    div.className="word-item";
+      div.querySelector(".btn-remove").onclick=()=>{
+        removedWords.push(w);
+        save();
+        location.reload();
+      };
 
-    div.innerHTML=`
-      <span>
-        <strong>${word}</strong>: ${count}
-        <span class="category">(${category})</span>
-      </span>
-      <div class="word-actions">
-        <button class="btn-remove">❌</button>
-        <button class="btn-merge">🔗</button>
-      </div>
-    `;
+      div.querySelector(".btn-merge").onclick=()=>{
+        const t=prompt("Unificar con:");
+        if(!t) return;
+        mergedWords[w]=t.toLowerCase();
+        save();
+        location.reload();
+      };
 
-    div.querySelector(".btn-remove").onclick=()=>{
-      removedWords.push(word);
-      saveConfig();
-      location.reload();
-    };
+      c.appendChild(div);
+    });
+}
 
-    div.querySelector(".btn-merge").onclick=()=>{
-      const target=prompt("Unificar '"+word+"' con:");
-      if(!target) return;
+function loadSelectors(){
+  const wSel=document.getElementById("wordSelect");
+  const cSel=document.getElementById("categorySelect");
 
-      mergedWords[word]=target.toLowerCase();
-      saveConfig();
-      location.reload();
-    };
-
-    container.appendChild(div);
+  wSel.innerHTML="";
+  Object.keys(globalCounts).forEach(w=>{
+    wSel.add(new Option(w,w));
   });
+
+  cSel.innerHTML="";
+  CATEGORIES.forEach(c=>{
+    cSel.add(new Option(c,c));
+  });
+}
+
+function assignCategory(){
+  const word=document.getElementById("wordSelect").value;
+  const cat=document.getElementById("categorySelect").value;
+
+  categorizedWords[word]=cat;
+  save();
+
+  render();
+  updateCategoryCounts();
+}
+
+function updateCategoryCounts(){
+  let counts={};
+
+  Object.entries(globalCounts).forEach(([w,c])=>{
+    const cat = categorizedWords[w] || "Sin categoría";
+    counts[cat]=(counts[cat]||0)+c;
+  });
+
+  const el=document.getElementById("categoryCounts");
+  el.innerHTML = Object.entries(counts)
+    .map(([c,v])=>`${c}: ${v}`)
+    .join(" | ");
 }
 </script>
 
