@@ -38,7 +38,7 @@ select,button{padding:6px;border-radius:6px;border:1px solid #ccc;}
 </div>
 
 <div class="card">
-<h2>Palabras más repetidas (venueCusine)</h2>
+<h2>Palabras pendientes (venueCusine)</h2>
 <div id="cuisine-results"></div>
 </div>
 
@@ -114,16 +114,15 @@ function render(){
   c.innerHTML="";
 
   Object.entries(globalCounts)
+    .filter(([w]) => !categorizedWords[w]) // 🔥 SOLO NO CLASIFICADAS
     .sort((a,b)=>b[1]-a[1])
     .slice(0,20)
     .forEach(([w,count])=>{
-      const cat = categorizedWords[w] || "Sin categoría";
-
       const div=document.createElement("div");
       div.className="word-item";
 
       div.innerHTML=`
-        <span><strong>${w}</strong>: ${count} (${cat})</span>
+        <span><strong>${w}</strong>: ${count}</span>
         <div class="word-actions">
           <button class="btn-remove">❌</button>
           <button class="btn-merge">🔗</button>
@@ -153,9 +152,11 @@ function loadSelectors(){
   const cSel=document.getElementById("categorySelect");
 
   wSel.innerHTML="";
-  Object.keys(globalCounts).forEach(w=>{
-    wSel.add(new Option(w,w));
-  });
+  Object.keys(globalCounts)
+    .filter(w => !categorizedWords[w]) // 🔥 SOLO NO CLASIFICADAS
+    .forEach(w=>{
+      wSel.add(new Option(w,w));
+    });
 
   cSel.innerHTML="";
   CATEGORIES.forEach(c=>{
@@ -171,6 +172,7 @@ function assignCategory(){
   save();
 
   render();
+  loadSelectors();
   updateCategoryCounts();
 }
 
