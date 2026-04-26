@@ -10,7 +10,6 @@ body{margin:0;font-family:system-ui,sans-serif;background:#f1f3f6;}
 header{background:#111827;color:white;padding:14px;text-align:center;font-weight:700;}
 .container{padding:12px;display:grid;gap:14px;}
 .card{background:white;border-radius:16px;padding:14px;box-shadow:0 4px 14px rgba(0,0,0,.08);}
-.small{font-size:.85rem;color:#6b7280;}
 
 .word-item{
   display:flex;
@@ -30,6 +29,12 @@ header{background:#111827;color:white;padding:14px;text-align:center;font-weight
 
 .btn-remove{background:#fee2e2;}
 .btn-merge{background:#dbeafe;}
+
+.category{
+  font-size:.8rem;
+  color:#2563eb;
+  margin-left:6px;
+}
 </style>
 </head>
 
@@ -38,91 +43,102 @@ header{background:#111827;color:white;padding:14px;text-align:center;font-weight
 <header>V-GO papuuuu</header>
 
 <div class="container">
-
 <div class="card">
 <h2>Palabras más repetidas (venueCusine)</h2>
 <div id="cuisine-results">Cargando...</div>
 </div>
-
 </div>
 
 <script>
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT8ONDwd70dk_MAYCAtVr2LC6PllKUt4A_4W0ClsbyCh01GvxVeLleM1hQyL8L0fGA2ARTUMxw_alBn/pub?output=csv";
 
+// === CATEGORÍAS ===
+const CATEGORIES = [
+"Hamburguesas y Sandwiches",
+"Pizzas y Empanadas",
+"Sushi",
+"Comidas al Plato",
+"Pastas",
+"Sano",
+"Cafetería y dulce",
+"Postres",
+"Helado",
+"Almacén",
+"Bebidas"
+];
+
 // === STORAGE ===
 let removedWords = JSON.parse(localStorage.getItem("removedWords") || "[]");
 let mergedWords = JSON.parse(localStorage.getItem("mergedWords") || "{}");
+let categorizedWords = JSON.parse(localStorage.getItem("categorizedWords") || "{}");
 
 function saveConfig(){
   localStorage.setItem("removedWords", JSON.stringify(removedWords));
   localStorage.setItem("mergedWords", JSON.stringify(mergedWords));
+  localStorage.setItem("categorizedWords", JSON.stringify(categorizedWords));
 }
 
-// === HELPERS (igual que tu sistema original) ===
+// === HELPERS ===
 function normalizeHeader(str){
-  return String(str || "")
-    .toLowerCase()
-    .replace(/\s+/g,"")
-    .replace(/[_-]/g,"");
+  return String(str||"").toLowerCase().replace(/\s+/g,"").replace(/[_-]/g,"");
 }
 
-function findColumnIndex(headers, possibleNames){
-  const normalizedHeaders = headers.map(normalizeHeader);
-
-  for(const name of possibleNames){
-    const normalizedName = normalizeHeader(name);
-    const exactIndex = normalizedHeaders.indexOf(normalizedName);
-    if(exactIndex !== -1) return exactIndex;
+function findColumnIndex(headers,names){
+  const norm=headers.map(normalizeHeader);
+  for(const n of names){
+    const i=norm.indexOf(normalizeHeader(n));
+    if(i!==-1) return i;
   }
-
-  for(let i=0;i<normalizedHeaders.length;i++){
-    for(const name of possibleNames){
-      const normalizedName = normalizeHeader(name);
-      if(normalizedHeaders[i].includes(normalizedName)){
-        return i;
-      }
-    }
-  }
-
   return -1;
 }
 
-// === CSV ===
 function parseCSV(text){
-  const lines = text.split(/\r?\n/).filter(l=>l.trim());
-  const headers = lines[0].split(",");
-  const rows = lines.slice(1).map(l=>l.split(","));
-  return {headers, rows};
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  const headers=lines[0].split(",");
+  const rows=lines.slice(1).map(l=>l.split(","));
+  return {headers,rows};
+}
+
+// === CLASIFICACIÓN ===
+function askCategory(word){
+  let msg = `¿A qué categoría pertenece "${word}"?\n\n`;
+  CATEGORIES.forEach((c,i)=> msg += `${i+1}. ${c}\n`);
+
+  let choice = prompt(msg);
+
+  let index = parseInt(choice)-1;
+
+  if(!isNaN(index) && CATEGORIES[index]){
+    categorizedWords[word] = CATEGORIES[index];
+    saveConfig();
+  }
 }
 
 // === MAIN ===
 fetch(SHEET_URL)
 .then(r=>r.text())
 .then(csv=>{
-  const {headers, rows} = parseCSV(csv);
+  const {headers,rows}=parseCSV(csv);
 
-  // 🔥 AHORA SÍ: SOLO venueCusine
-  const index = findColumnIndex(headers, ["venueCusine", "venue cuisine"]);
+  const index = findColumnIndex(headers, ["venueCusine","venue cuisine"]);
 
-  if(index === -1){
-    document.getElementById("cuisine-results").innerHTML =
-      "<p>No se encontró la columna venueCusine.</p>";
-    return;
-  }
-
-  let counts = {};
+  let counts={};
 
   rows.forEach(row=>{
-    let text = (row[index]||"").toLowerCase();
+    let text=(row[index]||"").toLowerCase();
 
     text.split(/[\s,;|/]+/).forEach(word=>{
-      word = word.trim();
+      word=word.trim();
       if(!word) return;
 
-      if(mergedWords[word]) word = mergedWords[word];
+      if(mergedWords[word]) word=mergedWords[word];
       if(removedWords.includes(word)) return;
 
-      counts[word] = (counts[word]||0)+1;
+      if(!categorizedWords[word]){
+        askCategory(word); // 🔥 pregunta una vez
+      }
+
+      counts[word]=(counts[word]||0)+1;
     });
   });
 
@@ -130,37 +146,40 @@ fetch(SHEET_URL)
 });
 
 function render(counts){
-  const container = document.getElementById("cuisine-results");
+  const container=document.getElementById("cuisine-results");
 
-  let sorted = Object.entries(counts)
-    .sort((a,b)=>b[1]-a[1])
-    .slice(0,20);
+  let sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,20);
 
-  container.innerHTML = "";
+  container.innerHTML="";
 
   sorted.forEach(([word,count])=>{
-    const div = document.createElement("div");
-    div.className = "word-item";
+    const category = categorizedWords[word] || "Sin categoría";
 
-    div.innerHTML = `
-      <span><strong>${word}</strong>: ${count}</span>
+    const div=document.createElement("div");
+    div.className="word-item";
+
+    div.innerHTML=`
+      <span>
+        <strong>${word}</strong>: ${count}
+        <span class="category">(${category})</span>
+      </span>
       <div class="word-actions">
         <button class="btn-remove">❌</button>
         <button class="btn-merge">🔗</button>
       </div>
     `;
 
-    div.querySelector(".btn-remove").onclick = ()=>{
+    div.querySelector(".btn-remove").onclick=()=>{
       removedWords.push(word);
       saveConfig();
       location.reload();
     };
 
-    div.querySelector(".btn-merge").onclick = ()=>{
-      const target = prompt("Unificar '" + word + "' con:");
+    div.querySelector(".btn-merge").onclick=()=>{
+      const target=prompt("Unificar '"+word+"' con:");
       if(!target) return;
 
-      mergedWords[word] = target.toLowerCase();
+      mergedWords[word]=target.toLowerCase();
       saveConfig();
       location.reload();
     };
